@@ -1,0 +1,37 @@
+// Body copy stays in 20–24px. Emphasis English stays in 24–32px.
+// The lesson sentence uses a larger display size taken from the prototype.
+// Primary controls use a 56px minimum hit target.
+$color-bg: #fefbf4;
+$color-surface: #ffffff;
+$color-text: #1a2b4a;
+$color-primary: #2166e8;
+$color-on-primary: #ffffff;
+$color-press: #e5f1ff;
+$font-body: 22px;
+$font-emphasis: 30px;
+$hit-min: 56px;
+
+:root {
+  --color-bg: #{$color-bg};
+  --color-surface: #{$color-surface};
+  --color-text: #{$color-text};
+  --color-primary: #{$color-primary};
+  --color-on-primary: #{$color-on-primary};
+  --color-press: #{$color-press};
+  --color-mint: #dff6ee;
+  --color-mint-card: #e6f7ef;
+  --color-pill: #d8eafc;
+  --color-wait: #c7dbfe;
+  --color-line: #efe6d4;
+  --font-sans:
+    'Nunito', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei',
+    'WenQuanYi Micro Hei', 'Droid Sans Fallback', sans-serif;
+  --font-body: #{$font-body};
+  --font-body-min: 20px;
+  --font-body-max: 24px;
+  --font-emphasis: #{$font-emphasis};
+  --font-emphasis-min: 24px;
+  --font-emphasis-max: 32px;
+  --font-display: 52px;
+  --hit-min: #{$hit-min};
+}

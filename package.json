@@ -1,0 +1,31 @@
+{
+  "name": "telltale",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n web,api -c cyan,green \"pnpm --filter @telltale/web dev\" \"pnpm --filter @telltale/api dev\"",
+    "dev:web": "pnpm --filter @telltale/web dev",
+    "dev:api": "pnpm --filter @telltale/api dev",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.36.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.4.0",
+    "globals": "^16.4.0",
+    "prettier": "^3.6.2",
+    "typescript-eslint": "^8.44.0"
+  }
+}
