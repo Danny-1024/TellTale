@@ -1,0 +1,43 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #243b32;
+  background: #f6f5ee;
+  font-size: 22px;
+  line-height: 1.6;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+.entry {
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 64px 24px;
+}
+.brand {
+  color: #355c4a;
+  font-weight: 700;
+}
+h1 {
+  font-size: clamp(28px, 5vw, 40px);
+  line-height: 1.4;
+}
+button {
+  min-height: 56px;
+  padding: 12px 24px;
+  border: 2px solid #355c4a;
+  border-radius: 12px;
+  background: #fff;
+  color: #243b32;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: wait;
+}
+:focus-visible {
+  outline: 3px solid #355c4a;
+  outline-offset: 4px;
+}
