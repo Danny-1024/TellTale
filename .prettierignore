@@ -1,0 +1,11 @@
+.work-dev/
+.work-docs/
+outputs/
+**/node_modules/
+**/dist/
+coverage/
+references/
+docs/
+pnpm-lock.yaml
+**/package-lock.json
+packages/contracts/src/generated/public.js

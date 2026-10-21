@@ -1,4 +1,4 @@
-import type { PublicContractMap } from "./schemas.js";
+import type { PublicContractMap } from './schemas.js';
 
 export interface ValidationIssue {
   instancePath: string;

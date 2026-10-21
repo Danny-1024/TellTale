@@ -5,6 +5,6 @@ export type {
   CourseSettings,
   SettingsSnapshot,
   ChildLearningMaterial,
-} from "./schemas.js";
-export * from "./parameters.js";
-export * from "./validation.js";
+} from './schemas.js';
+export * from './parameters.js';
+export * from './validation.js';

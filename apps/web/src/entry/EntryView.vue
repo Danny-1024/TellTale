@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useConnection } from './connection'
+import { onMounted } from 'vue';
+import { useConnection } from './connection';
 
-const connection = useConnection()
+const connection = useConnection();
 onMounted(() => {
-  void connection.check()
-})
+  void connection.check();
+});
 </script>
 
 <template>
@@ -20,11 +20,7 @@ onMounted(() => {
       >
       <template v-else>正在连接应用。</template>
     </p>
-    <button
-      type="button"
-      :disabled="connection.status === 'loading'"
-      @click="connection.check()"
-    >
+    <button type="button" :disabled="connection.status === 'loading'" @click="connection.check()">
       重新检查连接
     </button>
   </main>

@@ -1,5 +1,5 @@
-import validators from "./generated/public.js";
-import type { PublicContractMap } from "./schemas.js";
+import validators from './generated/public.js';
+import type { PublicContractMap } from './schemas.js';
 
 export class ContractValidationError extends Error {
   readonly contract: keyof PublicContractMap;
@@ -10,7 +10,7 @@ export class ContractValidationError extends Error {
     issues: readonly { instancePath: string; keyword: string }[],
   ) {
     super(`合同校验失败：${contract}`);
-    this.name = "ContractValidationError";
+    this.name = 'ContractValidationError';
     this.contract = contract;
     this.issues = issues.map((issue) => ({
       path: issue.instancePath,

@@ -47,10 +47,7 @@ function start(command, args, environment) {
     child,
     inspect() {
       if (spawnError) throw spawnError;
-      assert(
-        child.exitCode === null && child.signalCode === null,
-        `启动进程已经结束：${output}`,
-      );
+      assert(child.exitCode === null && child.signalCode === null, `启动进程已经结束：${output}`);
     },
   };
 }
@@ -63,8 +60,7 @@ async function waitFor(url, process) {
     try {
       response = await fetch(url, { signal: AbortSignal.timeout(1000) });
     } catch (error) {
-      if (!(error instanceof TypeError) && error.name !== 'TimeoutError')
-        throw error;
+      if (!(error instanceof TypeError) && error.name !== 'TimeoutError') throw error;
       await delay(150);
       continue;
     }
@@ -102,14 +98,11 @@ const results = {
   viewports: [],
 };
 try {
-  const live = await (
-    await waitFor(`http://127.0.0.1:${apiPort}/health/live`, development)
-  ).json();
+  const live = await (await waitFor(`http://127.0.0.1:${apiPort}/health/live`, development)).json();
   assert.equal(live.status, 'alive');
   await waitFor(webUrl, development);
   browser = await puppeteer.launch({
-    executablePath:
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
     headless: true,
     userDataDir: mkdtempSync(path.join(runtime, 'chrome-')),
     env: { ...process.env, TMPDIR: runtime },
@@ -128,8 +121,7 @@ try {
     assert.equal(await page.title(), 'TellTale English');
     const measurements = await page.evaluate(() => ({
       title: document.querySelector('h1')?.textContent,
-      buttonHeight: document.querySelector('button').getBoundingClientRect()
-        .height,
+      buttonHeight: document.querySelector('button').getBoundingClientRect().height,
       viewport: document.documentElement.clientWidth,
       content: document.documentElement.scrollWidth,
     }));
@@ -138,9 +130,7 @@ try {
     assert(measurements.content <= measurements.viewport);
     results.viewports.push({ width, ...measurements });
   }
-  const response = page.waitForResponse(
-    (response) => response.url() === `${webUrl}/health/live`,
-  );
+  const response = page.waitForResponse((response) => response.url() === `${webUrl}/health/live`);
   await page.click('button');
   const rechecked = await (await response).json();
   assert.equal(rechecked.status, 'alive');
@@ -170,9 +160,7 @@ const built = start(process.execPath, ['apps/api/dist/main.js'], {
   PORT: String(builtPort),
 });
 try {
-  const live = await (
-    await waitFor(`http://127.0.0.1:${builtPort}/health/live`, built)
-  ).json();
+  const live = await (await waitFor(`http://127.0.0.1:${builtPort}/health/live`, built)).json();
   assert.equal(live.status, 'alive');
   results.builtApi = { started: true, requestId: live.requestId };
 } finally {

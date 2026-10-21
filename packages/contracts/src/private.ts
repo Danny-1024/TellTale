@@ -1,15 +1,15 @@
-import Type from "typebox";
+import Type from 'typebox';
 import {
   IdentifierSchema,
   ChoiceExerciseSchema,
   MatchExerciseSchema,
   ClozeExerciseSchema,
-} from "./schemas.js";
+} from './schemas.js';
 
 const closed = { additionalProperties: false } as const;
 export const FamilyOwnerSchema = Type.Object(
   {
-    kind: Type.Literal("family"),
+    kind: Type.Literal('family'),
     adultId: IdentifierSchema,
     childId: IdentifierSchema,
   },
@@ -17,7 +17,7 @@ export const FamilyOwnerSchema = Type.Object(
 );
 export const ClassOwnerSchema = Type.Object(
   {
-    kind: Type.Literal("class"),
+    kind: Type.Literal('class'),
     classSessionId: IdentifierSchema,
     childId: Type.Null(),
   },
@@ -25,17 +25,13 @@ export const ClassOwnerSchema = Type.Object(
 );
 export const SampleOwnerSchema = Type.Object(
   {
-    kind: Type.Literal("sample"),
+    kind: Type.Literal('sample'),
     sampleSessionId: IdentifierSchema,
     childId: Type.Null(),
   },
   closed,
 );
-export const OwnerSchema = Type.Union([
-  FamilyOwnerSchema,
-  ClassOwnerSchema,
-  SampleOwnerSchema,
-]);
+export const OwnerSchema = Type.Union([FamilyOwnerSchema, ClassOwnerSchema, SampleOwnerSchema]);
 export const PrivateChoiceExerciseSchema = Type.Object(
   { ...ChoiceExerciseSchema.properties, correctOptionId: IdentifierSchema },
   closed,
@@ -44,10 +40,7 @@ export const PrivateMatchExerciseSchema = Type.Object(
   {
     ...MatchExerciseSchema.properties,
     correctPairs: Type.Array(
-      Type.Object(
-        { leftId: IdentifierSchema, rightId: IdentifierSchema },
-        closed,
-      ),
+      Type.Object({ leftId: IdentifierSchema, rightId: IdentifierSchema }, closed),
       { minItems: 2, maxItems: 3, uniqueItems: true },
     ),
   },
