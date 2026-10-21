@@ -4,12 +4,35 @@
   "version": "0.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./schemas": {
+      "types": "./dist/schemas.d.ts",
+      "import": "./dist/schemas.js"
+    },
+    "./server": {
+      "types": "./dist/private.d.ts",
+      "import": "./dist/private.js"
+    }
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "generate": "node scripts/generate.mjs",
+    "generate:check": "node scripts/generate.mjs --check",
+    "build": "pnpm generate:check && tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "typebox": "1.4.2"
   },
   "devDependencies": {
+    "@types/node": "^24.13.3",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "esbuild": "0.28.2",
+    "tsx": "^4.20.5",
     "typescript": "~6.0.2"
   }
 }
