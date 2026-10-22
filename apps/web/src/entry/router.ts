@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import EntryView from './EntryView.vue';
+import EntryView from '../course/CourseView.vue';
 
 export const router = createRouter({
   history: createWebHistory(),

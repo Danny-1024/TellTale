@@ -1,13 +1,15 @@
 {
   "name": "@telltale/worker",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "typecheck": "mkdir -p .generated && wrangler types .generated/runtime.d.ts --config ../../wrangler.jsonc && tsc --noEmit"
   },
   "dependencies": {
-    "@telltale/contracts": "workspace:*"
+    "@telltale/contracts": "workspace:*",
+    "cookie": "^2.0.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "typescript": "~6.0.2"
