@@ -15,6 +15,8 @@ export default defineConfig([
     'coverage/**',
     'references/**',
     'packages/contracts/src/generated/public.js',
+    '**/.generated/**',
+    '.wrangler/**',
   ]),
   {
     files: ['**/*.{js,mjs,ts,vue}'],

@@ -37,3 +37,7 @@ test-results/
 /.gitmessage
 /.githooks/
 /planning/
+.wrangler/
+.generated/
+.dev.vars
+.dev.vars.*
