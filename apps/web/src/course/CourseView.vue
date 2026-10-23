@@ -17,6 +17,7 @@ const {
   chosen,
   story,
   confirmed,
+  inputIssue,
   difficulty,
   checks,
   settings,
@@ -309,9 +310,14 @@ function matchAnswer(item: StoryExercise, id: string) {
           id="story"
           v-model="story"
           rows="6"
+          aria-describedby="story-count story-issue"
+          :aria-invalid="Boolean(inputIssue)"
           placeholder="例如：今天我和妈妈去了公园，看见一只小狗在追球。我捡起球，轻轻地扔给它。"
         />
-        <p class="character-count" :class="{ invalid: count > 300 }">{{ count }} / 300 字</p>
+        <p id="story-count" class="character-count" :class="{ invalid: count > 300 }">
+          {{ count }} / 300 字
+        </p>
+        <p id="story-issue" role="status">{{ inputIssue?.message }}</p>
         <fieldset>
           <legend>句子难度</legend>
           <div class="difficulty-options">
@@ -343,7 +349,7 @@ function matchAnswer(item: StoryExercise, id: string) {
           <button class="button outline" :disabled="busy" @click="move('choose')">返回选择</button
           ><button
             class="button primary"
-            :disabled="busy || !confirmed || count < 5 || count > 300"
+            :disabled="busy || !confirmed || Boolean(inputIssue)"
             @click="generate"
           >
             生成我的故事

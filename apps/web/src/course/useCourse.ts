@@ -1,5 +1,6 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
+import { inspectStoryInput } from '@telltale/contracts';
 import * as api from './api';
 import { LessonAudio, renderBook } from './media';
 
@@ -52,7 +53,9 @@ export function useCourse() {
       : [exercise.value?.id ?? ''],
   );
   const exerciseDone = computed(() => targets.value.every((id) => resolved.value[id]));
-  const count = computed(() => [...story.value].length);
+  const storyInput = computed(() => inspectStoryInput(story.value));
+  const count = computed(() => storyInput.value.count);
+  const inputIssue = computed(() => storyInput.value.issue);
   const progress = computed(() =>
     stage.value === 'listen'
       ? `第 ${sentenceIndex.value + 1} 句 / 共 ${lesson.value?.sentences.length ?? 0} 句`
@@ -132,9 +135,13 @@ export function useCourse() {
   }
   async function generate() {
     await act(async () => {
+      if (inputIssue.value)
+        throw new api.ApiError(400, inputIssue.value.code, inputIssue.value.message);
+      if (!confirmed.value)
+        throw new api.ApiError(400, 'CONFIRMATION_REQUIRED', '请检查全文并确认发送。');
       await apply(
         await api.command('generate', {
-          source: story.value.trim(),
+          source: storyInput.value.source,
           difficulty: difficulty.value,
           confirmed: confirmed.value,
         }),
@@ -374,9 +381,13 @@ export function useCourse() {
     audio.stop();
     if (bookUrl.value) URL.revokeObjectURL(bookUrl.value);
   });
-  watch(story, () => {
-    confirmed.value = false;
-  });
+  watch(
+    [story, difficulty],
+    () => {
+      confirmed.value = false;
+    },
+    { flush: 'sync' },
+  );
   watch(stage, async () => {
     await nextTick();
     document.querySelector<HTMLElement>('[data-title]')?.focus();
@@ -419,6 +430,7 @@ export function useCourse() {
     targetId,
     exerciseDone,
     count,
+    inputIssue,
     progress,
     isChild,
     move,

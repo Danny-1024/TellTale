@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { z } from 'zod';
+import { inspectStoryInput } from '@telltale/contracts';
 import type {
   CourseSnapshot,
   CourseAttempt,
@@ -290,29 +291,14 @@ export class CourseRoom extends DurableObject<Env> {
       const data = z
         .strictObject({
           operationId: uuid,
-          source: z.string().trim().min(1).max(600),
+          source: z.string(),
           difficulty: z.enum(['L', 'M', 'H']),
           confirmed: z.literal(true),
         })
         .parse(input);
-      requireCondition(
-        [...data.source].length <= 300,
-        400,
-        'INPUT_TOO_LONG',
-        '故事最多300个字符。',
-      );
-      requireCondition(
-        data.source.length >= 5,
-        400,
-        'INPUT_NEEDS_DETAIL',
-        '请补充人物和发生的事情。',
-      );
-      requireCondition(
-        !/(?:\d[ -]?){7,}|[\w.+-]+@[\w.-]+\.[a-z]{2,}/i.test(data.source),
-        400,
-        'PERSONAL_INFORMATION',
-        '请删除故事中的联系方式。',
-      );
+      const storyInput = inspectStoryInput(data.source);
+      if (storyInput.issue)
+        throw new HttpError(400, storyInput.issue.code, storyInput.issue.message);
       requireCondition(
         state.phase !== 'learning' && !['queued', 'running'].includes(state.job?.status ?? ''),
         409,
@@ -354,7 +340,7 @@ export class CourseRoom extends DurableObject<Env> {
         '本课已达到10次生成上限。',
       );
       state.generationCount += 1;
-      state.source = data.source.normalize('NFC');
+      state.source = storyInput.source;
       state.raw = null;
       state.content = null;
       state.phase = 'prepare';
