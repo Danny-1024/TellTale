@@ -1,4 +1,4 @@
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
 import { inspectStoryInput } from '@telltale/contracts';
 import * as api from './api';
@@ -388,10 +388,6 @@ export function useCourse() {
     },
     { flush: 'sync' },
   );
-  watch(stage, async () => {
-    await nextTick();
-    document.querySelector<HTMLElement>('[data-title]')?.focus();
-  });
   watch(dialog, (value) => {
     if (value) audio.stop();
   });

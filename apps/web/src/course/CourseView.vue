@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useCourse } from './useCourse';
 import type { StoryExercise } from '@telltale/contracts';
 
@@ -102,10 +102,75 @@ const wordExample = computed(
 const sourceLabel = computed(() =>
   lesson.value?.source === 'custom' ? '我的故事 · AI 生成文字' : '示例故事',
 );
-watch(dialog, async (value) => {
+const dialogTitle = computed(
+  () =>
+    ({
+      adult: '请成人输入本课口令',
+      help: '我们一步一步来',
+      end: '今天先到这里？',
+      close: '结束并清理本课',
+      guide: '如何开始一节故事课',
+      privacy: '本课的数据怎样使用',
+    })[dialog.value ?? 'guide'],
+);
+let dialogTrigger: HTMLElement | null = null;
+let dialogStage = '';
+let wordTrigger: HTMLElement | null = null;
+function focusTitle() {
+  document.querySelector<HTMLElement>('main [data-title]')?.focus();
+}
+function trapDialogFocus(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || !modal.value?.open) return;
+  const controls = [
+    ...modal.value.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+    ),
+  ].filter((element) => element.getClientRects().length > 0);
+  event.preventDefault();
+  const index = controls.findIndex((element) => element === document.activeElement);
+  const next = event.shiftKey
+    ? index <= 0
+      ? controls.length - 1
+      : index - 1
+    : (index + 1) % controls.length;
+  controls[next]?.focus();
+}
+onMounted(() => document.addEventListener('keydown', trapDialogFocus));
+onUnmounted(() => document.removeEventListener('keydown', trapDialogFocus));
+watch(busy, async (value) => {
+  if (value || !dialog.value) return;
   await nextTick();
-  if (value && !modal.value?.open) modal.value?.showModal();
-  else if (!value && modal.value?.open) modal.value.close();
+  if (dialog.value === 'adult' && error.value)
+    modal.value?.querySelector<HTMLInputElement>('input')?.focus();
+  else if (!modal.value?.contains(document.activeElement))
+    modal.value?.querySelector<HTMLElement>('#dialog-title')?.focus();
+});
+watch(dialog, async (value, previous) => {
+  if (value && !previous) {
+    dialogTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    dialogStage = stage.value;
+  }
+  await nextTick();
+  if (value) {
+    if (!modal.value?.open) modal.value?.showModal();
+    modal.value?.querySelector<HTMLElement>('#dialog-title')?.focus();
+  } else if (modal.value?.open) {
+    modal.value.close();
+    if (stage.value === dialogStage && dialogTrigger?.isConnected) dialogTrigger.focus();
+    else focusTitle();
+  }
+});
+watch([stage, sentenceIndex, exerciseIndex, editing], async () => {
+  await nextTick();
+  document.title = `${title.value} · TellTale English`;
+  if (!dialog.value) focusTitle();
+});
+watch(word, async (value) => {
+  if (document.activeElement instanceof HTMLElement && document.activeElement.closest('.word-tabs'))
+    wordTrigger = document.activeElement;
+  await nextTick();
+  if (value) document.querySelector<HTMLElement>('.word-detail h2')?.focus();
+  else if (wordTrigger?.isConnected) wordTrigger.focus();
 });
 watch(
   () => review.value?.lesson.revision,
@@ -131,12 +196,18 @@ function matchAnswer(item: StoryExercise, id: string) {
 </script>
 
 <template>
-  <div class="course-app" :class="{ 'reduce-motion': settings.reduceMotion }">
+  <div
+    class="course-app"
+    :class="{ 'reduce-motion': settings.reduceMotion, 'child-course': isChild }"
+  >
+    <a class="skip-link" href="#course-main" @click.prevent="focusTitle">跳到当前任务</a>
     <header class="topbar">
       <a href="/" class="brand" @click.prevent="session ? (dialog = 'close') : move('home')"
         ><span class="brand-mark" aria-hidden="true">t</span> TellTale <span>English</span></a
       >
-      <p class="progress-pill">{{ isChild ? progress : '一个故事，一次小小的发现' }}</p>
+      <p class="progress-pill" role="status" aria-live="polite" aria-atomic="true">
+        {{ isChild ? progress : '一个故事，一次小小的发现' }}
+      </p>
       <button v-if="session && isChild" class="button outline compact" @click="dialog = 'adult'">
         成人设置
       </button>
@@ -145,12 +216,13 @@ function matchAnswer(item: StoryExercise, id: string) {
         ><button @click="dialog = 'privacy'">隐私说明</button>
       </nav>
     </header>
-    <div v-if="error" class="error-banner" role="alert">
+    <div v-if="error && dialog !== 'adult'" id="course-error" class="error-banner" role="alert">
       {{ error }}<button aria-label="关闭错误提示" @click="error = ''">关闭</button>
     </div>
     <main v-if="loading" class="content narrow"><h1>正在打开 TellTale…</h1></main>
     <main
       v-else
+      id="course-main"
       class="content"
       :class="{
         narrow: [
@@ -361,7 +433,7 @@ function matchAnswer(item: StoryExercise, id: string) {
         <span class="waiting-orbit" aria-hidden="true">✦</span>
         <p class="eyebrow">我的故事</p>
         <h1 data-title tabindex="-1">{{ title }}</h1>
-        <p role="status">{{ session?.job?.stage }}</p>
+        <p role="status" aria-live="polite" aria-atomic="true">{{ session?.job?.stage }}</p>
         <p class="soft">生成完成后，请成人检查每句话和每道练习。</p>
         <button class="button outline" :disabled="busy" @click="cancelGeneration">取消生成</button>
       </section>
@@ -561,7 +633,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             :src="lesson.sentences[0].imageUrl"
             :alt="lesson.sentences[0].imageAlt ?? ''"
           />
-          <div v-else class="text-art">
+          <div v-else class="text-art" aria-hidden="true">
             <span aria-hidden="true">Aa</span>
             <p>每一句，都是你的故事</p>
           </div>
@@ -584,7 +656,7 @@ function matchAnswer(item: StoryExercise, id: string) {
       <section v-else-if="stage === 'listen' && sentence" class="learning-stage">
         <div class="story-art">
           <img v-if="sentence.imageUrl" :src="sentence.imageUrl" :alt="sentence.imageAlt ?? ''" />
-          <div v-else class="text-art">
+          <div v-else class="text-art" aria-hidden="true">
             <span class="sentence-number">{{ String(sentenceIndex + 1).padStart(2, '0') }}</span>
             <p>{{ lesson?.title }}</p>
           </div>
@@ -601,10 +673,11 @@ function matchAnswer(item: StoryExercise, id: string) {
           >
             {{ playing ? '■ 停止播放' : '▶ 播放这句话' }}
           </button>
-          <div class="word-tabs" aria-label="故事词卡">
+          <div class="word-tabs" role="group" aria-label="故事词卡">
             <button
               v-for="(item, index) in lesson?.words"
               :key="item.id"
+              lang="en"
               :aria-pressed="word?.id === item.id"
               :class="{ chosen: word?.id === item.id }"
               @click="showWord(word?.id === item.id ? null : index)"
@@ -615,7 +688,7 @@ function matchAnswer(item: StoryExercise, id: string) {
           <section v-if="word" class="word-detail" :aria-label="`词卡 ${word.word}`">
             <img v-if="word.imageUrl" :src="word.imageUrl" :alt="word.meaning" />
             <div>
-              <h2 lang="en">{{ word.word }}</h2>
+              <h2 lang="en" tabindex="-1">{{ word.word }}</h2>
               <p>{{ word.meaning }}</p>
               <p lang="en" class="word-example">{{ wordExample }}</p>
             </div>
@@ -687,12 +760,20 @@ function matchAnswer(item: StoryExercise, id: string) {
             ><small v-if="selected === option.id">✓ 已选择</small>
           </button>
         </div>
-        <p v-if="hint" class="notice" role="status">提示：{{ hint }}</p>
-        <div v-if="feedback" class="feedback" role="status">
-          <p>{{ feedback }}</p>
-          <button v-if="lastAttempt?.result === 'incorrect'" class="button outline" @click="retry">
-            再试一次
-          </button>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <p v-if="hint" class="notice">提示：{{ hint }}</p>
+        </div>
+        <div role="status" aria-live="polite" aria-atomic="true">
+          <div v-if="feedback" class="feedback">
+            <p>{{ feedback }}</p>
+            <button
+              v-if="lastAttempt?.result === 'incorrect'"
+              class="button outline"
+              @click="retry"
+            >
+              再试一次
+            </button>
+          </div>
         </div>
         <div class="practice-tools">
           <button
@@ -882,10 +963,16 @@ function matchAnswer(item: StoryExercise, id: string) {
       </div>
     </footer>
 
-    <dialog ref="modal" class="app-dialog" @cancel.prevent="dialog = null" @close="dialog = null">
+    <dialog
+      ref="modal"
+      class="app-dialog"
+      aria-labelledby="dialog-title"
+      @cancel.prevent="dialog = null"
+      @close="dialog = null"
+    >
+      <h2 id="dialog-title" tabindex="-1">{{ dialogTitle }}</h2>
       <button class="dialog-close" aria-label="关闭对话框" @click="dialog = null">×</button>
-      <template v-if="dialog === 'adult'"
-        ><h2>请成人输入本课口令</h2>
+      <template v-if="dialog === 'adult'">
         <p>学习中的课程会在验证后结束，已提交的练习仍可查看。</p>
         <form @submit.prevent="unlockAdult">
           <label
@@ -896,16 +983,17 @@ function matchAnswer(item: StoryExercise, id: string) {
               maxlength="6"
               pattern="[0-9]{6}"
               autocomplete="current-password"
+              :aria-invalid="Boolean(error)"
+              :aria-describedby="error ? 'adult-error' : undefined"
               required
           /></label>
-          <p v-if="error" role="alert" class="invalid">{{ error }}</p>
+          <p v-if="error" id="adult-error" role="alert" class="invalid">{{ error }}</p>
           <button class="button primary" :disabled="busy || unlockPin.length !== 6">
             验证并进入
           </button>
         </form></template
       >
-      <template v-else-if="dialog === 'help'"
-        ><h2>我们一步一步来</h2>
+      <template v-else-if="dialog === 'help'">
         <p>
           {{
             stage === 'practice'
@@ -925,16 +1013,14 @@ function matchAnswer(item: StoryExercise, id: string) {
         ><button class="button outline" :disabled="busy" @click="adultHelp">请成人陪我看一看</button
         ><button class="button primary" @click="dialog = null">我知道了</button></template
       >
-      <template v-else-if="dialog === 'end'"
-        ><h2>今天先到这里？</h2>
+      <template v-else-if="dialog === 'end'">
         <p>本课已经提交的练习会出现在结果页。还没有选择的题目不会算作答错。</p>
         <button class="button outline" @click="dialog = null">继续学习</button
         ><button class="button primary" :disabled="busy" @click="finish('early')">
           结束并看看收获
         </button></template
       >
-      <template v-else-if="dialog === 'close'"
-        ><h2>结束并清理本课</h2>
+      <template v-else-if="dialog === 'close'">
         <p>本课故事、练习和记录将关闭访问并从在线课堂清理。请先下载需要保留的作品。</p>
         <button class="button outline" @click="dialog = null">留在本课</button
         ><button
@@ -948,8 +1034,7 @@ function matchAnswer(item: StoryExercise, id: string) {
           先验证成人口令
         </button></template
       >
-      <template v-else-if="dialog === 'guide'"
-        ><h2>如何开始一节故事课</h2>
+      <template v-else-if="dialog === 'guide'">
         <ol>
           <li>成人设置本课口令，选择自编故事或示例。</li>
           <li>输入中文故事，确认发送范围后生成。</li>
@@ -962,8 +1047,7 @@ function matchAnswer(item: StoryExercise, id: string) {
         </p>
         <button class="button primary" @click="dialog = null">知道了</button></template
       >
-      <template v-else-if="dialog === 'privacy'"
-        ><h2>本课的数据怎样使用</h2>
+      <template v-else-if="dialog === 'privacy'">
         <p>无需注册，不收集儿童姓名、学校、生日或诊断信息。成人设置的口令只用于本课权限验证。</p>
         <p>
           自编故事仅在成人确认后发送给
