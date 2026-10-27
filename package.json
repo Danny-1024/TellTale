@@ -14,7 +14,7 @@
     "build": "pnpm --filter @telltale/contracts build && pnpm --filter @telltale/api build && pnpm --filter @telltale/web build",
     "build:worker": "pnpm --filter @telltale/contracts build && pnpm --filter @telltale/worker typecheck && pnpm --filter @telltale/web build",
     "deploy": "wrangler deploy",
-    "test:worker": "pnpm build:worker && node --test test/worker.test.mjs test/course.test.mjs test/story-input.test.mjs",
+    "test:worker": "pnpm build:worker && node --test test/worker.test.mjs test/course.test.mjs test/story-input.test.mjs test/security.test.mjs",
     "test:entry": "pnpm --filter @telltale/contracts build && pnpm --filter @telltale/api test:entry && pnpm --filter @telltale/web test:entry",
     "verify:entry": "node scripts/check-entry.mjs",
     "typecheck": "pnpm check:dependencies && pnpm --filter @telltale/contracts build && pnpm -r typecheck",

@@ -219,6 +219,11 @@ export class CourseRoom extends DurableObject<Env> {
         'PIN_LOCKED',
         '验证次数过多，请在十分钟后重试。',
       );
+      // 锁定期结束后重新计算连续错误次数，保留本次验证的真实结果。
+      if (state.lockedUntil > 0) {
+        state.pinFailures = 0;
+        state.lockedUntil = 0;
+      }
       state.pinFailures += 1;
       if (state.pinFailures >= 5) state.lockedUntil = Date.now() + 10 * 60_000;
       this.save(state);
@@ -259,7 +264,16 @@ export class CourseRoom extends DurableObject<Env> {
       );
       // 重复提交仍执行当前权限检查。
       if (['sample', 'generate', 'cancel', 'edit'].includes(action)) adult();
-      else if (action !== 'approve') child();
+      else if (action === 'approve') {
+        // 批准响应丢失时可重取当前运行令牌；成人重新进入后旧回执失效。
+        const receipt = existing.value as { runtime: string };
+        requireCondition(
+          state.mode === 'child' && equalToken(receipt.runtime, state.runtime),
+          409,
+          'APPROVAL_EXPIRED',
+          '本次审核已失效，请重新检查当前内容。',
+        );
+      } else child();
       return Response.json(existing.value);
     }
     requireCondition(
@@ -318,15 +332,27 @@ export class CourseRoom extends DurableObject<Env> {
         '本课已达到10次生成上限。',
       );
       // 全站额度在请求接收时预留，防止匿名请求无限调用模型。
+      // 预留标识包含课堂归属，客户端UUID不能复用其他课堂的额度。
       const reserved = await this.env.QUOTAS.getByName('generation-budget').reserve(
         'generation',
         100,
         24 * 60 * 60_000,
-        operationId,
+        `${state.id}:${operationId}`,
       );
       requireCondition(reserved, 429, 'GENERATION_LIMIT', '今天的故事生成额度已用完，请稍后再来。');
       state = this.authorize(identity, true);
       adult();
+      // 额度预留跨越RPC等待，并发的相同请求可能已写入原回执。
+      const repeated = state.seen[operationId];
+      if (repeated) {
+        requireCondition(
+          repeated.hash === requestHash,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          '同一次操作的内容发生变化。',
+        );
+        return Response.json(repeated.value);
+      }
       requireCondition(
         state.phase !== 'learning' && !['queued', 'running'].includes(state.job?.status ?? ''),
         409,
@@ -595,6 +621,14 @@ export class CourseRoom extends DurableObject<Env> {
             this.ctx.storage.sql.exec('DELETE FROM room');
             return;
           }
+          // 网络完成与解析结束都必须处于原任务期限内，迟到内容不能进入审核。
+          if (Date.now() >= latest.job.deadline) {
+            latest.job.status = 'failed';
+            latest.job.error = 'GENERATION_DEADLINE';
+            latest.job.stage = '生成未完成';
+            this.save(latest);
+            break;
+          }
           latest.content = result.content;
           latest.raw = result.raw;
           latest.phase = 'review';
@@ -638,7 +672,13 @@ export class CourseRoom extends DurableObject<Env> {
       }
     }
     const latest = this.read();
-    if (latest) await this.ctx.storage.setAlarm(Math.min(latest.leaseUntil, latest.expiresAt));
+    if (latest)
+      // 取消期间可能已经接收下一次生成，旧请求结束后仍需及时唤醒新任务。
+      await this.ctx.storage.setAlarm(
+        latest.job?.status === 'queued'
+          ? Date.now() + 1
+          : Math.min(latest.leaseUntil, latest.expiresAt),
+      );
   }
 }
 

@@ -1,0 +1,14 @@
+{
+  "name": "telltale-security-test",
+  "main": "security-worker.ts",
+  "compatibility_date": "2026-10-22",
+  "durable_objects": {
+    "bindings": [
+      { "name": "COURSES", "class_name": "SecurityTestRoom" },
+      { "name": "QUOTAS", "class_name": "TrafficQuota" },
+    ],
+  },
+  "migrations": [
+    { "tag": "security-tests", "new_sqlite_classes": ["SecurityTestRoom", "TrafficQuota"] },
+  ],
+}
