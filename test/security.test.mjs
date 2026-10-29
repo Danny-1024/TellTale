@@ -242,6 +242,88 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
     },
   );
 
+  await t.test(
+    'word reports preserve attempts and pair ownership and require adult export',
+    async () => {
+      const person = client();
+      await person.create();
+      await person.request('course/report', undefined, 409);
+      const { review } = await learning(person);
+      const [choice, match, cloze] = review.lesson.exercises;
+      await person.request('course/report', undefined, 403);
+      await person.command('event', { kind: 'sentence', targetId: review.lesson.sentences[0].id });
+      await person.command('event', { kind: 'word', targetId: review.lesson.words[0].id });
+      await person.command('event', { kind: 'replay', targetId: choice.id });
+      const correct = review.answers[choice.id];
+      const answer = (exerciseId, leftId, optionId, skip = false) =>
+        person.command('answer', { revision: 1, exerciseId, leftId, optionId, skip });
+      const wrong = await answer(
+        choice.id,
+        null,
+        choice.options.find((item) => item.id !== correct).id,
+      );
+      assert.equal(wrong.attempt.evidence, 'independent');
+      await person.command('event', { kind: 'hint', targetId: choice.id });
+      const retried = await answer(choice.id, null, correct);
+      assert.equal(retried.attempt.evidence, 'retry');
+      assert.deepEqual(retried.attempt.support, ['replay', 'hint']);
+      await person.command('event', { kind: 'adultHelp', targetId: match.id });
+      await answer(match.id, match.left[0].id, review.answers[match.id][match.left[0].id]);
+      await answer(match.id, match.left[1].id, null, true);
+      await answer(cloze.id, null, null, true);
+      const operationId = crypto.randomUUID();
+      const finished = await person.command('finish', { operationId, reason: 'completed' });
+      assert.deepEqual(
+        await person.command('finish', { operationId, reason: 'completed' }),
+        finished,
+      );
+      const rows = finished.session.summary.wordResults;
+      assert.equal(rows.length, 5);
+      assert.equal(rows[0].status, 'retry');
+      assert.equal(rows[0].attempts.length, 2);
+      assert(rows[0].sentenceViewed && rows[0].cardViewed);
+      assert.equal(rows[2].status, 'supported');
+      assert.equal(rows[2].attempts.length, 1);
+      assert.equal(rows[3].status, 'skipped');
+      assert.equal(rows[3].attempts.length, 2);
+      assert.equal(rows[1].status, 'unpracticed');
+      assert.equal(rows[4].status, 'unpracticed');
+      await person.request('course/report', undefined, 403);
+      await person.request('course/unlock', { pin: person.pin });
+      const report = await person.request('course/report');
+      assert.deepEqual(report.summary, finished.session.summary);
+      assert.equal(report.lesson.revision, 1);
+      assert(!JSON.stringify(report).includes('"answers"'));
+      // 读取既有课堂摘要时只补充可追溯投影，缺失的结束时间保持未知。
+      const previous = await state(person);
+      delete previous.summary.finishedAt;
+      delete previous.summary.wordResults;
+      await patch(person, { summary: previous.summary });
+      const migrated = await person.request('course/report');
+      assert.equal(migrated.summary.finishedAt, null);
+      assert.deepEqual(migrated.summary.wordResults, rows);
+      await person.close();
+      await person.request('course/report', undefined, 401);
+      const replay = client();
+      await replay.create();
+      const second = (await learning(replay)).review;
+      const task = second.lesson.exercises[0];
+      await replay.command('event', { kind: 'replay', targetId: task.id });
+      const result = await replay.command('answer', {
+        revision: 1,
+        exerciseId: task.id,
+        leftId: null,
+        optionId: second.answers[task.id],
+        skip: false,
+      });
+      assert.equal(result.attempt.evidence, 'independent');
+      const early = await replay.command('finish', { reason: 'early' });
+      assert.equal(early.session.summary.wordResults[0].status, 'independent');
+      assert.equal(early.session.summary.wordResults[4].status, 'unpracticed');
+      await replay.close();
+    },
+  );
+
   await t.test('same-origin, CSRF, cookie and runtime ownership protect course data', async () => {
     const first = client(),
       second = client();

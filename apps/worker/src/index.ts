@@ -44,7 +44,7 @@ export default {
     try {
       if (pathname === '/api/v1/capabilities' && request.method === 'GET')
         return Response.json(
-          { generation: Boolean(env.DEEPSEEK_API_KEY), model: 'deepseek-flash', version: '1.0.0' },
+          { generation: Boolean(env.DEEPSEEK_API_KEY), model: 'deepseek-flash', version: '1.1.0' },
           { headers },
         );
       const url = new URL(request.url);
@@ -53,6 +53,7 @@ export default {
         'capabilities',
         ...[
           'review',
+          'report',
           'sample',
           'generate',
           'cancel',
@@ -142,7 +143,8 @@ export default {
             ? pathname.slice('/api/v1/course/'.length)
             : '';
       requireCondition(
-        action && (action === 'session' || action === 'review' ? request.method === 'GET' : write),
+        action &&
+          (['session', 'review', 'report'].includes(action) ? request.method === 'GET' : write),
         404,
         'NOT_FOUND',
         '找不到该操作。',

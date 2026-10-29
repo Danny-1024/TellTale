@@ -1328,3 +1328,34 @@ select {
     scroll-behavior: auto !important;
   }
 }
+.word-report {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+.word-report h2,
+.word-report li {
+  overflow-wrap: anywhere;
+}
+.word-report li {
+  margin-bottom: 12px;
+}
+.word-status {
+  font-weight: 800;
+}
+/* 学习内容在独立区域滚动，支持和推进操作占据实际空间，避免覆盖重试等控件。 */
+.child-course {
+  height: 100dvh;
+  overflow: hidden;
+}
+.child-course .content {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 24px;
+}
+.child-course .topbar,
+.child-course .learning-footer {
+  flex-shrink: 0;
+}

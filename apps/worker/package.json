@@ -1,7 +1,7 @@
 {
   "name": "@telltale/worker",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "typecheck": "mkdir -p .generated && wrangler types .generated/runtime.d.ts --config ../../wrangler.jsonc && tsc --noEmit"

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useCourse } from './useCourse';
 import type { StoryExercise } from '@telltale/contracts';
+import { wordResultLabels } from '@telltale/contracts';
 
 const {
   stage,
@@ -35,6 +36,8 @@ const {
   lastAttempt,
   dialog,
   bookUrl,
+  reportUrl,
+  makeReport,
   lesson,
   sentence,
   word,
@@ -86,6 +89,7 @@ const title = computed(
       input: '把故事讲给我们',
       waiting: '故事正在准备',
       review: '把关每一句话',
+      report: '本课练习报告',
       cover: '今天的故事',
       listen: '听读故事',
       practice: '一起做练习',
@@ -290,7 +294,7 @@ function matchAnswer(item: StoryExercise, id: string) {
       <section v-else-if="stage === 'setup'" class="paper-card">
         <p class="eyebrow">成人准备 · 1 / 2</p>
         <h1 data-title tabindex="-1">{{ title }}</h1>
-        <p>设置本课的成人口令。交给孩子后，查看审核和下载故事书需要再次验证。</p>
+        <p>设置本课的成人口令。交给孩子后，查看审核、保存故事书和练习报告需要再次验证。</p>
         <form @submit.prevent="create">
           <label
             >6位成人口令<input
@@ -867,6 +871,60 @@ function matchAnswer(item: StoryExercise, id: string) {
             ><span>项练习先放一放</span>
           </article>
         </div>
+        <section class="word-report" aria-label="逐词练习报告">
+          <article
+            v-for="result in session.summary.wordResults"
+            :key="result.wordId"
+            class="paper-card"
+          >
+            <p class="eyebrow">{{ result.isFocus ? '本课重点词' : '故事词语' }}</p>
+            <h2>
+              <span lang="en">{{ result.word }}</span> · {{ result.meaning }}
+            </h2>
+            <p class="word-status">{{ wordResultLabels[result.status] }}</p>
+            <p>
+              {{ result.sentenceViewed ? '已阅读原句' : '未记录原句阅读' }} ·
+              {{ result.cardViewed ? '已查看词卡' : '未查看词卡' }}
+            </p>
+            <details v-if="result.attempts.length">
+              <summary>查看{{ result.attempts.length }}次实际提交</summary>
+              <ol>
+                <li v-for="(attempt, index) in result.attempts" :key="attempt.id">
+                  {{ index === 0 ? '首次提交' : `第${index + 1}次提交` }}：{{
+                    { correct: '完成', incorrect: '需要再试', skipped: '跳过' }[attempt.result]
+                  }}
+                  ·
+                  {{
+                    {
+                      independent: '独立尝试',
+                      supported: '使用了支持',
+                      retry: '再次尝试',
+                      skipped: '未作答',
+                    }[attempt.evidence]
+                  }}
+                  <span v-if="attempt.support?.length">
+                    ·
+                    {{
+                      attempt.support
+                        .map(
+                          (kind) =>
+                            ({ hint: '提示', adultHelp: '成人协助', replay: '正常重听' })[kind],
+                        )
+                        .join('、')
+                    }}</span
+                  >
+                </li>
+              </ol>
+            </details>
+            <p v-else>本课没有提交这个词语的练习。</p>
+          </article>
+        </section>
+        <p class="soft small">
+          结果仅描述本课匿名练习。每次提交均保留原始条件，不代表个人长期掌握程度。
+        </p>
+        <button class="button outline" :disabled="busy" @click="makeReport">
+          {{ session.mode === 'adult' ? '生成本课报告 PNG' : '请成人验证并生成报告' }}
+        </button>
         <div class="summary-bottom">
           <article class="paper-card">
             <p class="eyebrow">给陪伴者的一句话</p>
@@ -919,6 +977,24 @@ function matchAnswer(item: StoryExercise, id: string) {
         </div>
       </section>
 
+      <section v-else-if="stage === 'report' && reportUrl" class="book-page">
+        <p class="eyebrow">成人保存 · 本课匿名练习</p>
+        <h1 data-title tabindex="-1">本课练习报告</h1>
+        <img
+          :src="reportUrl"
+          class="book-preview"
+          alt="包含本课重点词及真实逐词结果的练习报告预览"
+        />
+        <div class="action-row">
+          <button class="button outline" @click="move('summary')">回到本课结果</button
+          ><a class="button primary" :href="reportUrl" download="TellTale-practice-report.png"
+            >下载练习报告 PNG</a
+          >
+        </div>
+        <p class="soft small">
+          报告宽1080像素，仅在当前页面生成；下载文件由成人保管。全部尝试记录可在本课结果页查看。
+        </p>
+      </section>
       <section v-else-if="stage === 'book' && bookUrl" class="book-page">
         <p class="eyebrow">我的故事书</p>
         <h1 data-title tabindex="-1">{{ lesson?.title }}</h1>
@@ -1078,7 +1154,7 @@ function matchAnswer(item: StoryExercise, id: string) {
           <li>输入中文故事，确认发送范围后生成。</li>
           <li>成人检查全部文字、词卡和练习，再交给孩子。</li>
           <li>逐句阅读，查看词卡，完成三类练习。随时可以求助、休息或结束。</li>
-          <li>成人验证后保存故事书，并结束、清理课堂。</li>
+          <li>成人验证后保存故事书和逐词练习报告，并结束、清理课堂。</li>
         </ol>
         <p>
           自编故事提供文字学习，示例配有图片与音频。刷新页面后需要成人验证，未提交的选择无法恢复。

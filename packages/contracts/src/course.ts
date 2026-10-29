@@ -57,7 +57,28 @@ export interface CourseAttempt {
   result: 'correct' | 'incorrect' | 'skipped';
   evidence: 'independent' | 'supported' | 'retry' | 'skipped';
   createdAt: string;
+  support?: ('hint' | 'adultHelp' | 'replay')[];
 }
+
+export interface WordPracticeResult {
+  wordId: string;
+  word: string;
+  meaning: string;
+  isFocus: boolean;
+  sentenceViewed: boolean;
+  cardViewed: boolean;
+  status: 'unpracticed' | 'needs_retry' | 'skipped' | 'independent' | 'supported' | 'retry';
+  attempts: CourseAttempt[];
+}
+
+export const wordResultLabels = {
+  unpracticed: '尚未练习',
+  needs_retry: '需要再试',
+  skipped: '本次跳过',
+  independent: '本题独立完成',
+  supported: '支持下完成',
+  retry: '重做后完成',
+} as const;
 
 export interface CourseSummary {
   reason: 'completed' | 'early';
@@ -67,6 +88,13 @@ export interface CourseSummary {
   skipped: number;
   attempts: CourseAttempt[];
   suggestion: string;
+  finishedAt: string | null;
+  wordResults: WordPracticeResult[];
+}
+
+export interface PracticeReport {
+  lesson: StoryLesson;
+  summary: CourseSummary;
 }
 
 export interface CourseJob {

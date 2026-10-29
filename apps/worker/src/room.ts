@@ -10,6 +10,7 @@ import type {
 import { createContent, generatedSchema, sampleContent, type GeneratedStory } from './content';
 import { generateStory, ProviderError } from './provider';
 import { focusExercises } from './focus';
+import { wordPracticeResults } from './report';
 import {
   equalToken,
   HttpError,
@@ -103,7 +104,11 @@ export class CourseRoom extends DurableObject<Env> {
             attempts: state.job.attempts,
           }
         : null,
-      summary: canRead ? state.summary : null,
+      // 已存在的1.0课堂也从原始事件补充逐词投影，不推测缺失的结束时间。
+      summary:
+        canRead && state.summary
+          ? this.summarize(state, state.summary.reason, state.summary.finishedAt ?? null)
+          : null,
       expiresAt: Math.min(state.leaseUntil, state.expiresAt),
     };
   }
@@ -190,7 +195,7 @@ export class CourseRoom extends DurableObject<Env> {
     identity: Identity,
     requestHash: string,
   ): Promise<Response> {
-    let state = this.authorize(identity, action !== 'session' && action !== 'review');
+    let state = this.authorize(identity, !['session', 'review', 'report'].includes(action));
     const adult = () =>
       requireCondition(state.mode === 'adult', 403, 'ADULT_REQUIRED', '请先完成成人验证。');
     const child = () =>
@@ -211,6 +216,19 @@ export class CourseRoom extends DurableObject<Env> {
         '当前没有待审核的课程。',
       );
       return Response.json({ ...state.content, raw: state.raw });
+    }
+    if (action === 'report') {
+      adult();
+      requireCondition(
+        state.phase === 'finished' && state.content && state.summary,
+        409,
+        'REPORT_NOT_READY',
+        '请先结束本课，再生成练习报告。',
+      );
+      return Response.json({
+        lesson: state.content.lesson,
+        summary: this.summarize(state, state.summary.reason, state.summary.finishedAt ?? null),
+      });
     }
     if (action === 'unlock') {
       const { pin } = z.strictObject({ pin: z.string().regex(/^\d{6}$/) }).parse(input);
@@ -547,9 +565,14 @@ export class CourseRoom extends DurableObject<Env> {
       const answer = state.content!.answers[exercise.id]!;
       const correctId = typeof answer === 'string' ? answer : answer[targetId];
       const prior = state.attempts.filter((a) => a.targetId === targetId);
-      const supported = state.events.some(
-        (e) => e.targetId === exercise.id && ['hint', 'adultHelp', 'replay'].includes(e.kind),
-      );
+      const support = state.events
+        .filter(
+          (event) =>
+            event.targetId === exercise.id && ['hint', 'adultHelp', 'replay'].includes(event.kind),
+        )
+        .map((event) => event.kind as 'hint' | 'adultHelp' | 'replay');
+      // 重听正常示范单独记录；提示和成人协助才改变支持条件。
+      const supported = support.some((kind) => kind === 'hint' || kind === 'adultHelp');
       const attempt: CourseAttempt = {
         id: crypto.randomUUID(),
         exerciseId: exercise.id,
@@ -563,6 +586,7 @@ export class CourseRoom extends DurableObject<Env> {
               ? 'supported'
               : 'independent',
         createdAt: new Date().toISOString(),
+        support,
       };
       state.attempts.push(attempt);
       value = {
@@ -599,7 +623,11 @@ export class CourseRoom extends DurableObject<Env> {
     );
     return Response.json(value);
   }
-  private summarize(state: RoomState, reason: CourseSummary['reason']): CourseSummary {
+  private summarize(
+    state: RoomState,
+    reason: CourseSummary['reason'],
+    finishedAt: string | null = new Date().toISOString(),
+  ): CourseSummary {
     const latest = new Map(state.attempts.map((a) => [a.targetId, a]));
     return {
       reason,
@@ -608,6 +636,8 @@ export class CourseRoom extends DurableObject<Env> {
       completed: [...latest.values()].filter((a) => a.result === 'correct').length,
       skipped: [...latest.values()].filter((a) => a.result === 'skipped').length,
       attempts: state.attempts,
+      finishedAt,
+      wordResults: wordPracticeResults(state.content!.lesson, state.attempts, state.events),
       suggestion: state.events.some((e) => e.kind === 'rest')
         ? '本课使用了休息。下次开始前，可以一起约定随时休息的方式。'
         : state.events.some((e) => e.kind === 'hint')

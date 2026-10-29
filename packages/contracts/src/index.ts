@@ -10,6 +10,7 @@ export * from './parameters.js';
 export * from './validation.js';
 export * from './story-input.js';
 export * from './review-validation.js';
+export { wordResultLabels } from './course.js';
 export type {
   StoryLesson,
   StorySentence,
@@ -22,4 +23,6 @@ export type {
   CourseSnapshot,
   ReviewContent,
   StoryDraft,
+  WordPracticeResult,
+  PracticeReport,
 } from './course.js';

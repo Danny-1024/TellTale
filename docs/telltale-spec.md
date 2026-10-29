@@ -2,16 +2,22 @@
 
 | 文档信息 | 内容 |
 | --- | --- |
-| 版本 | 1.1 |
+| 版本 | 1.2 |
 | 编制日期 | 2026年10月19日 |
 | 对应需求 | telltale-prd.md，PRD-001至PRD-034，NFR-01至NFR-10 |
 | 系统形态 | 当前发布使用Vue响应式Web、Cloudflare Workers与SQLite Durable Objects |
 | 文档用途 | 约定模块、数据、接口、状态、算法、部署和测试要求 |
 | 状态说明 | 本文是目标设计；现有示例代码提供目录和技术参考，完整实现及真实服务集成以测试记录为准 |
 
-## 当前发布实现：1.0.0
+## 当前发布实现：1.1.0
 
 本节规定2026年10月22日发布的有效实现。后续章节的家庭账号、MongoDB、Redis、腾讯云媒体与语音服务等设计对应完整产品需求，尚未纳入当前部署。
+
+2026年10月29日增加当前临时课程的重点词与逐词报告。`POST /api/v1/course/focus`接收operationId、当前revision和2–3个不同的当前wordId；仅成人审核状态允许。按词卡释义和Intl.Segmenter定位的原句重建题目，不调用模型；保留lesson、sentence和word编号及全文，新题编号与revision共同更新，重新确认五项检查。相同请求返回原回执，内容冲突、旧版本、未知词及儿童请求拒绝。reviewIssues由前后端共享，保存失败不替换原材料。
+
+CourseAttempt增加当次support列表，分别记录hint、adultHelp和replay；只有提示及成人帮助改变supported条件，同题先前有尝试仍保留retry。服务端按choice/cloze的targetWordIds及match逐组leftId投影5个WordPracticeResult，保留每条尝试与时间，不根据最终正确覆盖先前结果。尚未提交的词显示unpracticed，单纯阅读不产生独立完成。
+
+`GET /api/v1/course/report`仅允许有效成人访问已经结束的课堂，返回公开lesson和从原始事件、作答重建的summary，不返回私有答案。summary包含finishedAt及wordResults，既有1.0课堂可从原记录重建投影，缺失时间保持null。报告Canvas宽1080，根据真实字形宽度换行；包含审核版本、重点词、逐词结果与次数、实际支持条件和建议。取得当前服务端授权后生成预览与下载链接，过期、清理、离开及新运行释放Blob。生产服务绑定和迁移保持既有配置。
 
 - 前端：Vue 3、TypeScript、Vite。复用原有demo的奶油色背景、蓝色主操作、薄荷色词卡、Nunito字体和固定操作栏，支持电脑、平板及手机。学习页面采用至少56像素主要操作区域、键盘焦点及减少动效选项。
 - 发布：GitHub `Danny-1024/TellTale` 的main分支触发Workers Builds；构建命令`pnpm build:worker`，部署命令`pnpm exec wrangler deploy`。Worker名称`telltale`，生产域名`https://telltale.danny-dev.workers.dev`。静态资源与API同源。

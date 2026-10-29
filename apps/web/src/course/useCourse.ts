@@ -2,7 +2,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
 import { inspectStoryInput, reviewIssues } from '@telltale/contracts';
 import * as api from './api';
-import { LessonAudio, renderBook } from './media';
+import { LessonAudio, renderBook, renderPracticeReport } from './media';
 
 export function useCourse() {
   const stage = ref('home');
@@ -42,7 +42,14 @@ export function useCourse() {
     lastAttempt = ref<CourseAttempt | null>(null);
   const dialog = ref<'help' | 'adult' | 'end' | 'privacy' | 'guide' | 'close' | null>(null);
   const returnStage = ref('listen'),
-    bookUrl = ref('');
+    bookUrl = ref(''),
+    reportUrl = ref('');
+  function clearExports() {
+    if (bookUrl.value) URL.revokeObjectURL(bookUrl.value);
+    if (reportUrl.value) URL.revokeObjectURL(reportUrl.value);
+    bookUrl.value = '';
+    reportUrl.value = '';
+  }
   const audio = new LessonAudio((value) => {
     playing.value = value;
   });
@@ -95,6 +102,7 @@ export function useCourse() {
             : '操作失败，请重试。';
       if (!(cause instanceof api.ApiError)) console.error(cause);
       if (cause instanceof api.ApiError && cause.status === 401) {
+        clearExports();
         audio.stop();
         session.value = null;
         stage.value = 'expired';
@@ -114,6 +122,9 @@ export function useCourse() {
     move('review');
   }
   async function apply(result: api.CourseResult, fromRefresh = false) {
+    // 旧版本完成回执升级时，重新读取服务端逐词投影，保留真实原始记录。
+    if (result.session.summary && !result.session.summary.wordResults)
+      result = await api.loadSession();
     session.value = result.session;
     settings.value = { ...result.session.settings };
     if (fromRefresh && result.session.mode === 'child') {
@@ -194,6 +205,7 @@ export function useCourse() {
         settings: settings.value,
       });
       session.value = result.session;
+      clearExports();
       review.value = null;
       story.value = '';
       checks.value.fill(false);
@@ -304,7 +316,7 @@ export function useCourse() {
   async function finish(reason: 'completed' | 'early') {
     audio.stop();
     await act(async () => {
-      session.value = (await api.command('finish', { reason })).session;
+      await apply(await api.command('finish', { reason }));
       dialog.value = null;
       move('summary');
     });
@@ -335,6 +347,19 @@ export function useCourse() {
       move('book');
     });
   }
+  async function makeReport() {
+    if (session.value?.mode !== 'adult') {
+      dialog.value = 'adult';
+      return;
+    }
+    await act(async () => {
+      const report = await api.getReport();
+      const blob = await renderPracticeReport(report);
+      if (reportUrl.value) URL.revokeObjectURL(reportUrl.value);
+      reportUrl.value = URL.createObjectURL(blob);
+      move('report');
+    });
+  }
   async function close() {
     await act(async () => {
       await api.closeSession();
@@ -342,8 +367,7 @@ export function useCourse() {
       review.value = null;
       story.value = '';
       dialog.value = null;
-      if (bookUrl.value) URL.revokeObjectURL(bookUrl.value);
-      bookUrl.value = '';
+      clearExports();
       move('home');
     });
   }
@@ -355,6 +379,7 @@ export function useCourse() {
       } catch (cause) {
         error.value = cause instanceof Error ? cause.message : '连接失败，请重试。';
         if (cause instanceof api.ApiError && cause.status === 401) {
+          clearExports();
           session.value = null;
           move('expired');
         }
@@ -401,7 +426,7 @@ export function useCourse() {
     document.removeEventListener('visibilitychange', background);
     window.removeEventListener('pagehide', stopAudio);
     audio.stop();
-    if (bookUrl.value) URL.revokeObjectURL(bookUrl.value);
+    clearExports();
   });
   watch(
     [story, difficulty],
@@ -445,6 +470,8 @@ export function useCourse() {
     lastAttempt,
     dialog,
     bookUrl,
+    reportUrl,
+    makeReport,
     lesson,
     sentence,
     word,

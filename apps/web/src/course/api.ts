@@ -1,4 +1,10 @@
-import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
+import type {
+  CourseSnapshot,
+  ReviewContent,
+  StoryDraft,
+  CourseAttempt,
+  PracticeReport,
+} from '@telltale/contracts';
 
 export class ApiError extends Error {
   constructor(
@@ -47,6 +53,7 @@ export const loadSession = () => request<CourseResult>('session');
 export const createSession = (pin: string, settings: CourseSnapshot['settings']) =>
   request<CourseResult>('session', { pin, kind: 'class', settings });
 export const getReview = () => request<ReviewContent & { raw: StoryDraft | null }>('course/review');
+export const getReport = () => request<PracticeReport>('course/report');
 export const heartbeat = () => request<{ expiresAt: number }>('course/heartbeat', {});
 export async function unlock(pin: string): Promise<CourseResult> {
   const result = await request<CourseResult>('course/unlock', { pin });

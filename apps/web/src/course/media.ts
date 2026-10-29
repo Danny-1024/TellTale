@@ -1,4 +1,5 @@
-import type { StoryLesson } from '@telltale/contracts';
+import type { StoryLesson, PracticeReport } from '@telltale/contracts';
+import { wordResultLabels } from '@telltale/contracts';
 
 export class LessonAudio {
   private audio: HTMLAudioElement | null = null;
@@ -138,6 +139,80 @@ export async function renderBook(lesson: StoryLesson): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob(
       (blob) => (blob ? resolve(blob) : reject(new Error('绘本生成失败。'))),
+      'image/png',
+    ),
+  );
+}
+
+export async function renderPracticeReport(report: PracticeReport): Promise<Blob> {
+  await document.fonts.load('800 36px Nunito');
+  if (!document.fonts.check('800 36px Nunito')) throw new Error('报告字体加载失败。');
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('当前浏览器无法生成报告。');
+  const date = report.summary.finishedAt
+    ? new Intl.DateTimeFormat('zh-CN', {
+        timeZone: 'Asia/Shanghai',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(report.summary.finishedAt))
+    : '原课堂未记录结束时间';
+  const paragraphs = [
+    'TellTale English · 本课练习报告',
+    report.lesson.title,
+    report.lesson.titleEn,
+    `${date} · ${report.lesson.difficulty}难度 · 审核版本${report.lesson.revision}`,
+    report.summary.reason === 'early' ? '本课提前结束，未进行的内容保留未完成。' : '本课已结束。',
+    `重点词：${report.summary.wordResults
+      .filter((word) => word.isFocus)
+      .map((word) => word.word)
+      .join('、')}`,
+    ...report.summary.wordResults.flatMap((word) => [
+      `${word.word} · ${word.meaning}${word.isFocus ? ' · 重点词' : ''}`,
+      `${wordResultLabels[word.status]} · ${word.sentenceViewed ? '已阅读原句' : '未记录原句阅读'} · ${word.cardViewed ? '已查看词卡' : '未查看词卡'}`,
+      `实际提交${word.attempts.length}次：正确${word.attempts.filter((item) => item.result === 'correct').length}次，错误${word.attempts.filter((item) => item.result === 'incorrect').length}次，跳过${word.attempts.filter((item) => item.result === 'skipped').length}次。`,
+      word.attempts.every((item) => item.support !== undefined)
+        ? `支持条件下提交：提示${word.attempts.filter((item) => item.support?.includes('hint')).length}次，成人协助${word.attempts.filter((item) => item.support?.includes('adultHelp')).length}次，正常重听${word.attempts.filter((item) => item.support?.includes('replay')).length}次。`
+        : '本课部分早期提交未单独记录支持类型，请按原始尝试条件查看。',
+      ...(word.attempts.length
+        ? [
+            `首次：${{ correct: '完成', incorrect: '需要再试', skipped: '跳过' }[word.attempts[0]!.result]}；最近：${wordResultLabels[word.status]}。`,
+          ]
+        : []),
+    ]),
+    '给陪伴者的一句话',
+    report.summary.suggestion,
+    '本报告仅记录本课匿名练习情况；结果不代表长期掌握程度。全部尝试可在本课结果页查看。',
+    `${report.lesson.source === 'custom' ? 'AI生成文字 · 成人已审核' : '示例故事'} · 课堂结束前保存，下载文件由成人保管。`,
+  ];
+  context.font = '700 32px Nunito, "PingFang SC", sans-serif';
+  // 按真实字形宽度换行，长词和中文都保留完整文字。
+  const lines: string[] = [];
+  const segmenter = new Intl.Segmenter('zh', { granularity: 'grapheme' });
+  for (const paragraph of paragraphs) {
+    let line = '';
+    for (const { segment } of segmenter.segment(paragraph)) {
+      if (line && context.measureText(line + segment).width > 920) {
+        lines.push(line);
+        line = '';
+      }
+      line += segment;
+    }
+    if (line) lines.push(line);
+    lines.push('');
+  }
+  canvas.height = 120 + lines.length * 48;
+  if (canvas.height > 30000) throw new Error('报告内容超过图片尺寸限制，请在结果页查看完整记录。');
+  context.fillStyle = '#fefbf4';
+  context.fillRect(0, 0, 1080, canvas.height);
+  context.fillStyle = '#1a2b4a';
+  context.textBaseline = 'top';
+  context.font = '700 32px Nunito, "PingFang SC", sans-serif';
+  lines.forEach((line, index) => context.fillText(line, 80, 60 + index * 48));
+  return new Promise((resolve, reject) =>
+    canvas.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('报告图片生成失败。'))),
       'image/png',
     ),
   );
