@@ -9,6 +9,7 @@ export type {
 export * from './parameters.js';
 export * from './validation.js';
 export * from './story-input.js';
+export * from './review-validation.js';
 export type {
   StoryLesson,
   StorySentence,

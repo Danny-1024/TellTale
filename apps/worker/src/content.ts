@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ReviewContent, StoryLesson } from '@telltale/contracts';
+import { reviewIssues } from '@telltale/contracts';
 
 const text = z.string().trim().min(1).max(300);
 const index = z.number().int().min(0).max(4);
@@ -50,6 +51,8 @@ export function createContent(
   source: 'sample' | 'custom',
 ): ReviewContent {
   const data = generatedSchema.parse(input);
+  const issues = reviewIssues(data, difficulty);
+  if (issues.length) throw new Error(`CONTENT_INVALID: ${issues.join('；')}`);
   const require = (valid: boolean, reason: string) => {
     if (!valid) throw new Error(`CONTENT_INVALID: ${reason}`);
   };

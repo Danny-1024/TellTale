@@ -1,6 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
-import { inspectStoryInput } from '@telltale/contracts';
+import { inspectStoryInput, reviewIssues } from '@telltale/contracts';
 import * as api from './api';
 import { LessonAudio, renderBook } from './media';
 
@@ -20,6 +20,16 @@ export function useCourse() {
     confirmed = ref(false),
     difficulty = ref<'L' | 'M' | 'H'>('L');
   const checks = ref([false, false, false, false, false]);
+  const focusWordIds = ref<string[]>([]);
+  const savedFocus = computed(() => [
+    ...new Set(review.value?.lesson.exercises.flatMap((item) => item.targetWordIds) ?? []),
+  ]);
+  const focusChanged = computed(
+    () => [...focusWordIds.value].sort().join(',') !== [...savedFocus.value].sort().join(','),
+  );
+  const editIssues = computed(() =>
+    review.value?.raw ? reviewIssues(review.value.raw, review.value.lesson.difficulty) : [],
+  );
   const settings = ref({ showChinese: true, volume: 0.8, reduceMotion: true });
   const sentenceIndex = ref(0),
     exerciseIndex = ref(0),
@@ -99,6 +109,7 @@ export function useCourse() {
   }
   async function openReview() {
     review.value = await api.getReview();
+    focusWordIds.value = [...savedFocus.value];
     checks.value = [false, false, false, false, false];
     move('review');
   }
@@ -156,10 +167,21 @@ export function useCourse() {
   }
   async function saveEdits() {
     await act(async () => {
+      if (editIssues.value.length) throw new Error(editIssues.value.join('；'));
       await apply(
         await api.command('edit', {
           revision: review.value!.lesson.revision,
           raw: review.value!.raw,
+        }),
+      );
+    });
+  }
+  async function saveFocus() {
+    await act(async () => {
+      await apply(
+        await api.command('focus', {
+          revision: review.value!.lesson.revision,
+          wordIds: focusWordIds.value,
         }),
       );
     });
@@ -407,6 +429,10 @@ export function useCourse() {
     confirmed,
     difficulty,
     checks,
+    focusWordIds,
+    focusChanged,
+    editIssues,
+    saveFocus,
     settings,
     sentenceIndex,
     exerciseIndex,

@@ -57,6 +57,7 @@ export default {
           'generate',
           'cancel',
           'edit',
+          'focus',
           'approve',
           'event',
           'answer',

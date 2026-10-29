@@ -20,6 +20,10 @@ const {
   inputIssue,
   difficulty,
   checks,
+  focusWordIds,
+  focusChanged,
+  editIssues,
+  saveFocus,
   settings,
   sentenceIndex,
   exerciseIndex,
@@ -550,7 +554,14 @@ function matchAnswer(item: StoryExercise, id: string) {
               >
             </fieldset>
             <p>修改词语或句子时，请同时更新相关例句、练习和正确答案。保存后需要重新审核。</p>
-            <button class="button primary" :disabled="busy" @click="saveEdits">
+            <ul v-if="editIssues.length" role="alert" class="notice">
+              <li v-for="issue in editIssues" :key="issue">{{ issue }}</li>
+            </ul>
+            <button
+              class="button primary"
+              :disabled="busy || editIssues.length > 0"
+              @click="saveEdits"
+            >
               保存并重新检查
             </button>
             <button class="button outline" :disabled="busy" @click="discardEdits">放弃修改</button>
@@ -606,6 +617,33 @@ function matchAnswer(item: StoryExercise, id: string) {
               </div>
             </div>
           </div>
+          <fieldset v-if="review.raw" class="paper-card focus-picker">
+            <legend>选择本课重点词（2–3个）</legend>
+            <p>练习会覆盖所选词语，故事原文保持不变。更新练习后请重新检查答案。</p>
+            <label v-for="item in review.lesson.words" :key="item.id" class="check">
+              <input
+                v-model="focusWordIds"
+                type="checkbox"
+                :value="item.id"
+                :disabled="busy || (!focusWordIds.includes(item.id) && focusWordIds.length >= 3)"
+              />
+              <span lang="en">{{ item.word }}</span> · {{ item.meaning }}
+            </label>
+            <p role="status">
+              已选择{{ focusWordIds.length }}个重点词{{
+                focusChanged ? '，需要更新练习并重新审核。' : '。'
+              }}
+            </p>
+            <button
+              class="button outline"
+              :disabled="
+                busy || !focusChanged || focusWordIds.length < 2 || focusWordIds.length > 3
+              "
+              @click="saveFocus"
+            >
+              更新三类练习
+            </button>
+          </fieldset>
           <section class="approval paper-card">
             <h2>我已逐项检查</h2>
             <label v-for="(label, index) in checkLabels" :key="label" class="check"
@@ -616,7 +654,7 @@ function matchAnswer(item: StoryExercise, id: string) {
                 重新准备故事</button
               ><button
                 class="button primary"
-                :disabled="busy || !checks.every(Boolean)"
+                :disabled="busy || focusChanged || !checks.every(Boolean)"
                 @click="start"
               >
                 确认内容，交给孩子

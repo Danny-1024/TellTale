@@ -9,6 +9,7 @@ import type {
 } from '@telltale/contracts';
 import { createContent, generatedSchema, sampleContent, type GeneratedStory } from './content';
 import { generateStory, ProviderError } from './provider';
+import { focusExercises } from './focus';
 import {
   equalToken,
   HttpError,
@@ -263,7 +264,7 @@ export class CourseRoom extends DurableObject<Env> {
         '同一次操作的内容发生变化。',
       );
       // 重复提交仍执行当前权限检查。
-      if (['sample', 'generate', 'cancel', 'edit'].includes(action)) adult();
+      if (['sample', 'generate', 'cancel', 'edit', 'focus'].includes(action)) adult();
       else if (action === 'approve') {
         // 批准响应丢失时可重取当前运行令牌；成人重新进入后旧回执失效。
         const receipt = existing.value as { runtime: string };
@@ -397,6 +398,37 @@ export class CourseRoom extends DurableObject<Env> {
       state.content = null;
       state.raw = null;
       value = { session: this.snapshot(state, '') };
+    } else if (action === 'focus') {
+      adult();
+      const data = z
+        .strictObject({
+          operationId: uuid,
+          revision: z.number().int(),
+          wordIds: z.array(uuid).min(2).max(3),
+        })
+        .parse(input);
+      requireCondition(
+        new Set(data.wordIds).size === data.wordIds.length,
+        400,
+        'FOCUS_INVALID',
+        '请选择2–3个不同的词语。',
+      );
+      requireCondition(
+        state.content && state.raw && state.phase === 'review',
+        409,
+        'INVALID_TRANSITION',
+        '请在自编故事审核页面调整重点词。',
+      );
+      requireCondition(
+        state.content.lesson.revision === data.revision,
+        409,
+        'REVISION_CONFLICT',
+        '内容已更新，请重新打开审核。',
+      );
+      const result = focusExercises(state.content, state.raw, data.wordIds);
+      state.content = result.content;
+      state.raw = result.raw;
+      value = { session: this.snapshot(state, '') };
     } else if (action === 'edit') {
       adult();
       const data = z
@@ -422,7 +454,7 @@ export class CourseRoom extends DurableObject<Env> {
           throw new HttpError(
             422,
             'CONTENT_INVALID',
-            '修改影响了词卡或题目，请一并检查例句、选项及答案。',
+            error.message.slice('CONTENT_INVALID: '.length),
           );
         throw error;
       }

@@ -195,6 +195,53 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
     return { review, approved };
   }
 
+  await t.test(
+    'focus selection rebuilds exercises without changing the reviewed story',
+    async (test) => {
+      const previousHandler = handler;
+      test.after(() => {
+        handler = previousHandler;
+      });
+      const person = client();
+      await person.create();
+      handler = async () => completion();
+      await generate(person);
+      await waitJob(person, 'ready');
+      const original = await person.request('course/review');
+      const selected = original.lesson.words.slice(2, 5).map((word) => word.id);
+      await person.command('focus', { revision: 1, wordIds: [selected[0], selected[0]] }, 400);
+      await person.command(
+        'focus',
+        { revision: 1, wordIds: [selected[0], crypto.randomUUID()] },
+        400,
+      );
+      const operationId = crypto.randomUUID();
+      const payload = { operationId, revision: 1, wordIds: selected };
+      await person.command('focus', payload);
+      const updated = await person.request('course/review');
+      assert.deepEqual(updated.lesson.sentences, original.lesson.sentences);
+      assert.deepEqual(updated.lesson.words, original.lesson.words);
+      assert.equal(updated.lesson.id, original.lesson.id);
+      assert.equal(updated.lesson.revision, 2);
+      assert.deepEqual(
+        [...new Set(updated.lesson.exercises.flatMap((item) => item.targetWordIds))].sort(),
+        [...selected].sort(),
+      );
+      await person.command('focus', payload);
+      assert.equal((await person.request('course/review')).lesson.revision, 2);
+      await person.command('focus', { revision: 1, wordIds: selected.slice(0, 2) }, 409);
+      const invalid = structuredClone(updated.raw);
+      invalid.sentences[0].en = 'A cat plays with a little dog near the green park.';
+      const rejected = await person.command('edit', { revision: 2, raw: invalid }, 422);
+      assert(rejected.error.message.includes('第1句'));
+      assert.equal((await person.request('course/review')).lesson.revision, 2);
+      await person.command('approve', { revision: 1, checks: Array(5).fill(true), settings }, 409);
+      await person.command('approve', { revision: 2, checks: Array(5).fill(true), settings });
+      await person.command('focus', { revision: 2, wordIds: selected }, 403);
+      await person.close();
+    },
+  );
+
   await t.test('same-origin, CSRF, cookie and runtime ownership protect course data', async () => {
     const first = client(),
       second = client();
