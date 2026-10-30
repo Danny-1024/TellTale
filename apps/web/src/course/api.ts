@@ -50,13 +50,13 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   return data as T;
 }
 export const loadSession = () => request<CourseResult>('session');
-export const createSession = (pin: string, settings: CourseSnapshot['settings']) =>
-  request<CourseResult>('session', { pin, kind: 'class', settings });
+export const createSession = (settings: CourseSnapshot['settings']) =>
+  request<CourseResult>('session', { kind: 'class', settings });
 export const getReview = () => request<ReviewContent & { raw: StoryDraft | null }>('course/review');
 export const getReport = () => request<PracticeReport>('course/report');
 export const heartbeat = () => request<{ expiresAt: number }>('course/heartbeat', {});
-export async function unlock(pin: string): Promise<CourseResult> {
-  const result = await request<CourseResult>('course/unlock', { pin });
+export async function unlock(): Promise<CourseResult> {
+  const result = await request<CourseResult>('course/unlock', {});
   runtime = '';
   return result;
 }

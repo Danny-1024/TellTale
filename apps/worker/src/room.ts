@@ -14,7 +14,6 @@ import { wordPracticeResults } from './report';
 import {
   equalToken,
   HttpError,
-  pinDigest,
   randomToken,
   requireCondition,
   settingsSchema,
@@ -25,10 +24,6 @@ interface RoomState {
   id: string;
   cookieHash: string;
   csrf: string;
-  pinHash: string;
-  salt: string;
-  pinFailures: number;
-  lockedUntil: number;
   mode: 'adult' | 'child';
   phase: CourseSnapshot['phase'];
   kind: CourseSnapshot['kind'];
@@ -115,8 +110,6 @@ export class CourseRoom extends DurableObject<Env> {
   async initialize(input: {
     id: string;
     cookieHash: string;
-    pinHash: string;
-    salt: string;
     kind: RoomState['kind'];
     settings: RoomState['settings'];
   }) {
@@ -125,8 +118,6 @@ export class CourseRoom extends DurableObject<Env> {
     const state: RoomState = {
       ...input,
       csrf: randomToken(),
-      pinFailures: 0,
-      lockedUntil: 0,
       mode: 'adult',
       phase: 'prepare',
       content: null,
@@ -197,13 +188,13 @@ export class CourseRoom extends DurableObject<Env> {
   ): Promise<Response> {
     let state = this.authorize(identity, !['session', 'review', 'report'].includes(action));
     const adult = () =>
-      requireCondition(state.mode === 'adult', 403, 'ADULT_REQUIRED', '请先完成成人验证。');
+      requireCondition(state.mode === 'adult', 403, 'ADULT_REQUIRED', '请先进入课程设置。');
     const child = () =>
       requireCondition(
         state.mode === 'child' && identity.runtime && equalToken(identity.runtime, state.runtime),
         403,
         'RUNTIME_REQUIRED',
-        '学习页面已重新打开，请成人验证后重新准备。',
+        '学习页面已重新打开，请重新准备课程。',
       );
     if (action === 'session')
       return Response.json({ session: this.snapshot(state, identity.runtime), csrf: state.csrf });
@@ -218,7 +209,8 @@ export class CourseRoom extends DurableObject<Env> {
       return Response.json({ ...state.content, raw: state.raw });
     }
     if (action === 'report') {
-      adult();
+      // 本课报告仅包含已审核内容和本课结果，儿童运行令牌可以读取。
+      if (state.mode === 'child') child();
       requireCondition(
         state.phase === 'finished' && state.content && state.summary,
         409,
@@ -231,26 +223,8 @@ export class CourseRoom extends DurableObject<Env> {
       });
     }
     if (action === 'unlock') {
-      const { pin } = z.strictObject({ pin: z.string().regex(/^\d{6}$/) }).parse(input);
-      requireCondition(
-        state.lockedUntil <= Date.now(),
-        429,
-        'PIN_LOCKED',
-        '验证次数过多，请在十分钟后重试。',
-      );
-      // 锁定期结束后重新计算连续错误次数，保留本次验证的真实结果。
-      if (state.lockedUntil > 0) {
-        state.pinFailures = 0;
-        state.lockedUntil = 0;
-      }
-      state.pinFailures += 1;
-      if (state.pinFailures >= 5) state.lockedUntil = Date.now() + 10 * 60_000;
-      this.save(state);
-      const result = await pinDigest(pin, state.salt);
-      state = this.authorize(identity, true);
-      requireCondition(equalToken(result, state.pinHash), 403, 'PIN_INVALID', '成人口令不正确。');
-      state.pinFailures = 0;
-      state.lockedUntil = 0;
+      z.strictObject({}).parse(input);
+      // 切换入口不验证身份；学习中的切换会结束本课并保留已提交结果。
       state.mode = 'adult';
       state.runtime = '';
       if (state.phase === 'learning') state.summary = this.summarize(state, 'early');
@@ -267,7 +241,7 @@ export class CourseRoom extends DurableObject<Env> {
       return Response.json({ expiresAt: state.leaseUntil });
     }
     if (action === 'close') {
-      adult();
+      if (state.mode === 'child') child();
       this.ctx.storage.sql.exec('DELETE FROM room');
       await this.ctx.storage.deleteAlarm();
       return Response.json({ closed: true });

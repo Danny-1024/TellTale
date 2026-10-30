@@ -113,10 +113,10 @@ test('real Workers course flow protects answers, persists state, grades attempts
     rmSync(directory, { recursive: true });
   });
   const adult = client();
-  await adult.request('session', { pin: '385729', kind: 'class', settings }, 403, {
+  await adult.request('session', { kind: 'class', settings }, 403, {
     Origin: 'https://untrusted.example',
   });
-  await adult.request('session', { pin: '385729', kind: 'class', settings }, 201);
+  await adult.request('session', { kind: 'class', settings }, 201);
   const sampleOperation = crypto.randomUUID();
   await adult.command('sample', { operationId: sampleOperation });
   const review = await adult.request('course/review');
@@ -162,7 +162,7 @@ test('real Workers course flow protects answers, persists state, grades attempts
   await adult.command('event', { kind: 'rest', targetId: '' }, 403);
   adult.setRuntime(started.runtime);
   const second = client();
-  await second.request('session', { pin: '513246', kind: 'class', settings }, 201);
+  await second.request('session', { kind: 'class', settings }, 201);
   await second.command('sample');
   await second.command('approve', { revision: 1, checks: Array(5).fill(true), settings });
   second.setRuntime(started.runtime);
@@ -245,11 +245,9 @@ test('real Workers course flow protects answers, persists state, grades attempts
     { revision: 1, exerciseId: cloze.id, leftId: null, optionId: null, skip: true },
     409,
   );
-  await adult.request('course/close', {}, 403);
-  await adult.request('course/unlock', { pin: '000000' }, 403);
-  await adult.request('course/unlock', { pin: '385729' });
+  await adult.request('course/report');
   await adult.request('course/close', {});
   await adult.request('session', undefined, 401);
-  await second.request('course/unlock', { pin: '513246' });
+  await second.request('course/unlock', {});
   await second.request('course/close', {});
 });

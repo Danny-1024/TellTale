@@ -80,7 +80,6 @@ test('real workerd rejects invalid input before outbound calls and sends normali
   await request(
     'session',
     {
-      pin: '385729',
       kind: 'class',
       settings: { showChinese: true, volume: 0.8, reduceMotion: true },
     },

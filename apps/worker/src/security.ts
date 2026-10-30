@@ -6,7 +6,6 @@ export const settingsSchema = z.strictObject({
   reduceMotion: z.boolean(),
 });
 export const createSchema = z.strictObject({
-  pin: z.string().regex(/^\d{6}$/),
   kind: z.enum(['sample', 'class']),
   settings: settingsSchema,
 });
@@ -37,17 +36,6 @@ export async function digest(text: string): Promise<string> {
     new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))),
     (b) => b.toString(16).padStart(2, '0'),
   ).join('');
-}
-export async function pinDigest(pin: string, salt: string): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, [
-    'deriveBits',
-  ]);
-  const bytes = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: 100_000 },
-    key,
-    256,
-  );
-  return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 export function equalToken(left: string, right: string): boolean {
   const encoder = new TextEncoder();
