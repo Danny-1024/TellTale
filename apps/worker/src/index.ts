@@ -5,7 +5,6 @@ import {
   createSchema,
   digest,
   HttpError,
-  pinDigest,
   randomToken,
   readJson,
   requireCondition,
@@ -103,12 +102,9 @@ export default {
         requireCondition(quota, 429, 'RATE_LIMITED', '创建课程过于频繁，请稍后再试。');
         const id = crypto.randomUUID();
         const secret = randomToken();
-        const salt = randomToken();
         const response = await env.COURSES.getByName(id).initialize({
           id,
           cookieHash: await digest(secret),
-          pinHash: await pinDigest(data.pin, salt),
-          salt,
           kind: data.kind,
           settings: data.settings,
         });

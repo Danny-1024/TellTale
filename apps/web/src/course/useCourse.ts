@@ -12,9 +12,6 @@ export function useCourse() {
     error = ref(''),
     loading = ref(true),
     playing = ref(false);
-  const pin = ref(''),
-    confirmationPin = ref(''),
-    unlockPin = ref('');
   const chosen = ref<'sample' | 'custom'>('custom');
   const story = ref(''),
     confirmed = ref(false),
@@ -139,11 +136,7 @@ export function useCourse() {
   }
   async function create() {
     await act(async () => {
-      if (!/^\d{6}$/.test(pin.value) || pin.value !== confirmationPin.value)
-        throw new Error('请填写两次相同的6位成人口令。');
-      await apply(await api.createSession(pin.value, settings.value));
-      pin.value = '';
-      confirmationPin.value = '';
+      await apply(await api.createSession(settings.value));
     });
   }
   async function chooseStory() {
@@ -329,17 +322,12 @@ export function useCourse() {
   }
   async function unlockAdult() {
     await act(async () => {
-      const result = await api.unlock(unlockPin.value);
-      unlockPin.value = '';
+      const result = await api.unlock();
       dialog.value = null;
       await apply(result);
     });
   }
   async function makeBook() {
-    if (session.value?.mode !== 'adult') {
-      dialog.value = 'adult';
-      return;
-    }
     await act(async () => {
       if (bookUrl.value) URL.revokeObjectURL(bookUrl.value);
       const blob = await renderBook(lesson.value!);
@@ -348,10 +336,6 @@ export function useCourse() {
     });
   }
   async function makeReport() {
-    if (session.value?.mode !== 'adult') {
-      dialog.value = 'adult';
-      return;
-    }
     await act(async () => {
       const report = await api.getReport();
       const blob = await renderPracticeReport(report);
@@ -362,6 +346,8 @@ export function useCourse() {
   }
   async function close() {
     await act(async () => {
+      // 页面重新打开后运行令牌已失效，先恢复当前课堂再执行已确认的清理。
+      if (stage.value === 'recover') await api.unlock();
       await api.closeSession();
       session.value = null;
       review.value = null;
@@ -446,9 +432,6 @@ export function useCourse() {
     error,
     loading,
     playing,
-    pin,
-    confirmationPin,
-    unlockPin,
     chosen,
     story,
     confirmed,

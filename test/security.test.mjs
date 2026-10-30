@@ -119,7 +119,7 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
   const quotas = await worker.getDurableObjectNamespace('QUOTAS');
   let nextIp = 1;
   function client(ip = `203.0.113.${nextIp++}`) {
-    const value = { cookie: '', csrf: '', runtime: '', id: '', ip, pin: '835729' };
+    const value = { cookie: '', csrf: '', runtime: '', id: '', ip };
     value.request = async (route, body, expected = 200, overrides = {}) => {
       const response = await worker.dispatchFetch(`${origin}/api/v1/${route}`, {
         method: body === undefined ? 'GET' : 'POST',
@@ -153,9 +153,9 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
     };
     value.command = (action, body = {}, expected = 200) =>
       value.request(`course/${action}`, { operationId: crypto.randomUUID(), ...body }, expected);
-    value.create = () => value.request('session', { pin: value.pin, kind: 'class', settings }, 201);
+    value.create = () => value.request('session', { kind: 'class', settings }, 201);
     value.close = async () => {
-      await value.request('course/unlock', { pin: value.pin });
+      await value.request('course/unlock', {});
       await value.request('course/close', {});
       await value.request('session', undefined, 401);
     };
@@ -243,14 +243,14 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
   );
 
   await t.test(
-    'word reports preserve attempts and pair ownership and require adult export',
+    'word reports preserve attempts and allow the current course to export',
     async () => {
       const person = client();
       await person.create();
       await person.request('course/report', undefined, 409);
       const { review } = await learning(person);
       const [choice, match, cloze] = review.lesson.exercises;
-      await person.request('course/report', undefined, 403);
+      await person.request('course/report', undefined, 409);
       await person.command('event', { kind: 'sentence', targetId: review.lesson.sentences[0].id });
       await person.command('event', { kind: 'word', targetId: review.lesson.words[0].id });
       await person.command('event', { kind: 'replay', targetId: choice.id });
@@ -288,8 +288,6 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
       assert.equal(rows[3].attempts.length, 2);
       assert.equal(rows[1].status, 'unpracticed');
       assert.equal(rows[4].status, 'unpracticed');
-      await person.request('course/report', undefined, 403);
-      await person.request('course/unlock', { pin: person.pin });
       const report = await person.request('course/report');
       assert.deepEqual(report.summary, finished.session.summary);
       assert.equal(report.lesson.revision, 1);
@@ -327,7 +325,7 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
   await t.test('same-origin, CSRF, cookie and runtime ownership protect course data', async () => {
     const first = client(),
       second = client();
-    await first.request('session', { pin: first.pin, kind: 'class', settings }, 403, {
+    await first.request('session', { kind: 'class', settings }, 403, {
       Origin: 'https://untrusted.example',
     });
     await first.create();
@@ -354,30 +352,16 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
     await first.close();
     await second.close();
   });
-  await t.test(
-    'five incorrect PINs lock access and an expired lock starts a fresh attempt window',
-    async () => {
-      const person = client();
-      await person.create();
-      await learning(person);
-      for (let i = 0; i < 5; i++)
-        assert.equal(
-          (await person.request('course/unlock', { pin: '000000' }, 403)).error.code,
-          'PIN_INVALID',
-        );
-      const locked = await state(person);
-      assert.equal(locked.pinFailures, 5);
-      assert(locked.lockedUntil > Date.now() + 590000);
-      assert.equal(
-        (await person.request('course/unlock', { pin: person.pin }, 429)).error.code,
-        'PIN_LOCKED',
-      );
-      await patch(person, { lockedUntil: Date.now() - 1 });
-      await person.request('course/unlock', { pin: '000000' }, 403);
-      assert.equal((await state(person)).pinFailures, 1);
-      await person.close();
-    },
-  );
+  await t.test('returning to settings requires the course session and CSRF token', async () => {
+    const person = client();
+    await person.create();
+    await learning(person);
+    await person.request('course/review', undefined, 403);
+    await person.request('course/unlock', {}, 403, { 'X-CSRF-Token': '' });
+    await person.request('course/unlock', {});
+    assert.equal((await person.request('session')).session.phase, 'finished');
+    await person.close();
+  });
   await t.test(
     'idle and absolute boundaries reject access, delete content and clamp renewal',
     async () => {
@@ -414,7 +398,7 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
         await repeated.create();
         await repeated.close();
       }
-      await repeated.request('session', { pin: repeated.pin, kind: 'class', settings }, 429);
+      await repeated.request('session', { kind: 'class', settings }, 429);
       const person = client();
       await person.create();
       await patch(person, { generationCount: 10 });
@@ -499,7 +483,7 @@ test('real workerd enforces security, lifecycle and isolated provider failure bo
       const first = await person.command('approve', approval);
       const repeated = await person.command('approve', approval);
       assert.equal(first.runtime, repeated.runtime);
-      await person.request('course/unlock', { pin: person.pin });
+      await person.request('course/unlock', {});
       await person.command('sample');
       assert.equal((await person.command('approve', approval, 409)).error.code, 'APPROVAL_EXPIRED');
       await person.close();

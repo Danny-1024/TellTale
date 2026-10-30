@@ -17,19 +17,19 @@
 
 CourseAttempt增加当次support列表，分别记录hint、adultHelp和replay；只有提示及成人帮助改变supported条件，同题先前有尝试仍保留retry。服务端按choice/cloze的targetWordIds及match逐组leftId投影5个WordPracticeResult，保留每条尝试与时间，不根据最终正确覆盖先前结果。尚未提交的词显示unpracticed，单纯阅读不产生独立完成。
 
-`GET /api/v1/course/report`仅允许有效成人访问已经结束的课堂，返回公开lesson和从原始事件、作答重建的summary，不返回私有答案。summary包含finishedAt及wordResults，既有1.0课堂可从原记录重建投影，缺失时间保持null。报告Canvas宽1080，根据真实字形宽度换行；包含审核版本、重点词、逐词结果与次数、实际支持条件和建议。取得当前服务端授权后生成预览与下载链接，过期、清理、离开及新运行释放Blob。生产服务绑定和迁移保持既有配置。
+`GET /api/v1/course/report`允许有效课堂访问已经结束的课程，儿童模式须提供运行令牌，返回公开lesson和从原始事件、作答重建的summary，不返回私有答案。summary包含finishedAt及wordResults，既有1.0课堂可从原记录重建投影，缺失时间保持null。报告Canvas宽1080，根据真实字形宽度换行；包含审核版本、重点词、逐词结果与次数、实际支持条件和建议。取得当前服务端授权后生成预览与下载链接，过期、清理、离开及新运行释放Blob。生产服务绑定和迁移保持既有配置。
 
 - 前端：Vue 3、TypeScript、Vite。复用原有demo的奶油色背景、蓝色主操作、薄荷色词卡、Nunito字体和固定操作栏，支持电脑、平板及手机。学习页面采用至少56像素主要操作区域、键盘焦点及减少动效选项。
 - 发布：GitHub `Danny-1024/TellTale` 的main分支触发Workers Builds；构建命令`pnpm build:worker`，部署命令`pnpm exec wrangler deploy`。Worker名称`telltale`，生产域名`https://telltale.danny-dev.workers.dev`。静态资源与API同源。
 - 服务端：`apps/worker/src/index.ts`处理API与Cookie；`CourseRoom`为每课独立的SQLite Durable Object，存储课程、成人审核、临时运行令牌、尝试与支持事件；`TrafficQuota`保存限额预留记录。迁移标识`v1-courses`，绑定`COURSES`与`QUOTAS`。
 - 生成：服务端通过HTTPS调用DeepSeek `/chat/completions`，模型`deepseek-flash`，关闭思考模式，使用JSON输出及Zod严格校验。45秒总期限，最多三次尝试；取消后即使供应商返回也不会覆盖当前内容。供应商密钥通过`DEEPSEEK_API_KEY` Secret绑定注入，前端无法读取。
-- 权限：随机会话Cookie为HttpOnly、SameSite=Lax，生产使用Secure与`__Host-`前缀。所有写请求校验Origin、JSON类型及CSRF。成人六位口令通过PBKDF2与随机盐保存，连续五次错误锁定十分钟。儿童页面内存保存独立运行令牌；成人审核返回私有答案，儿童响应投影仅提供已审核公开材料。
+- 权限：随机会话Cookie为HttpOnly、SameSite=Lax，生产使用Secure与`__Host-`前缀。所有写请求校验Origin、JSON类型及CSRF。儿童页面内存保存独立运行令牌；成人审核返回私有答案，儿童响应投影仅提供已审核公开材料。进入课程设置使用确认操作，不验证操作者身份。
 - 数据：请求正文限制32KB，输入故事最多300个Unicode字符，拦截联系方式；一课最多十次生成、全站24小时最多100次、每个来源IP每小时最多五次创建。课程闲置租约15分钟、绝对期限4小时，由持久闹钟清理；主动结束删除课程记录。平台恢复历史仍服从课程原始有效期。
 - 作品：浏览器Canvas生成宽1080像素PNG。自编故事包含审核后文字，示例包含本地图片。文件由成人下载到设备，服务器不建立公开作品链接。
 
 主要接口：`GET /api/v1/capabilities`、`POST/GET /api/v1/session`、`GET /api/v1/course/review`；`POST /api/v1/course/{sample,generate,cancel,edit,approve,event,answer,finish,unlock,heartbeat,close}`。涉及业务变更的请求使用UUID操作标识防止重复写入，同一标识与不同请求内容冲突返回409。练习提交携带审核版本，旧版本返回409。所有API响应禁止缓存。
 
-课程状态为prepare、review、learning、finished；生成状态为queued、running、ready、failed、cancelled。审批进入儿童模式并生成运行令牌，刷新后必须成人验证；审核修改增加版本号。作答、跳过和支持使用真实服务端事件判定，未提交内容不计为错误。网络中断保留未确认操作标识，重试取得原结果。
+课程状态为prepare、review、learning、finished；生成状态为queued、running、ready、failed、cancelled。审批进入儿童模式并生成运行令牌，刷新后确认进入设置并结束当前儿童运行；审核修改增加版本号。作答、跳过和支持使用真实服务端事件判定，未提交内容不计为错误。网络中断保留未确认操作标识，重试取得原结果。
 
 测试使用真实本地workerd与SQLite实例验证进程重启、权限、幂等、版本冲突、判题、支持证据和清理；供应商验收单独使用真实DeepSeek请求。生产发布后核对GitHub提交、Workers部署版本及线上业务闭环。
 

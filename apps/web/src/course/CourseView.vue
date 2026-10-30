@@ -12,9 +12,6 @@ const {
   error,
   loading,
   playing,
-  pin,
-  confirmationPin,
-  unlockPin,
   chosen,
   story,
   confirmed,
@@ -96,7 +93,7 @@ const title = computed(
       rest: '休息一下',
       summary: '把今天的收获带回家',
       book: '我的故事书',
-      recover: '请成人回来一下',
+      recover: '重新打开本课',
       expired: '这一课已结束',
       'generation-error': '故事还没有准备好',
     })[stage.value] ?? 'TellTale English',
@@ -113,7 +110,7 @@ const sourceLabel = computed(() =>
 const dialogTitle = computed(
   () =>
     ({
-      adult: '请成人输入本课口令',
+      adult: '进入课程设置',
       help: '我们一步一步来',
       end: '今天先到这里？',
       close: '结束并清理本课',
@@ -148,9 +145,7 @@ onUnmounted(() => document.removeEventListener('keydown', trapDialogFocus));
 watch(busy, async (value) => {
   if (value || !dialog.value) return;
   await nextTick();
-  if (dialog.value === 'adult' && error.value)
-    modal.value?.querySelector<HTMLInputElement>('input')?.focus();
-  else if (!modal.value?.contains(document.activeElement))
+  if (!modal.value?.contains(document.activeElement))
     modal.value?.querySelector<HTMLElement>('#dialog-title')?.focus();
 });
 watch(dialog, async (value, previous) => {
@@ -224,7 +219,7 @@ function matchAnswer(item: StoryExercise, id: string) {
         ><button @click="dialog = 'privacy'">隐私说明</button>
       </nav>
     </header>
-    <div v-if="error && dialog !== 'adult'" id="course-error" class="error-banner" role="alert">
+    <div v-if="error" id="course-error" class="error-banner" role="alert">
       {{ error }}<button aria-label="关闭错误提示" @click="error = ''">关闭</button>
     </div>
     <main v-if="loading" class="content narrow"><h1>正在打开 TellTale…</h1></main>
@@ -294,27 +289,8 @@ function matchAnswer(item: StoryExercise, id: string) {
       <section v-else-if="stage === 'setup'" class="paper-card">
         <p class="eyebrow">成人准备 · 1 / 2</p>
         <h1 data-title tabindex="-1">{{ title }}</h1>
-        <p>设置本课的成人口令。交给孩子后，查看审核、保存故事书和练习报告需要再次验证。</p>
+        <p>选择适合本课的学习支持，然后准备故事。</p>
         <form @submit.prevent="create">
-          <label
-            >6位成人口令<input
-              v-model="pin"
-              type="password"
-              inputmode="numeric"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              autocomplete="new-password"
-              required /></label
-          ><label
-            >再次输入口令<input
-              v-model="confirmationPin"
-              type="password"
-              inputmode="numeric"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              autocomplete="new-password"
-              required
-          /></label>
           <fieldset class="settings">
             <legend>学习支持</legend>
             <label class="check"
@@ -333,10 +309,7 @@ function matchAnswer(item: StoryExercise, id: string) {
           <p class="notice">
             本课最多保留4小时，连续15分钟无活动后结束。未提交的选择只保留在当前页面；关闭或刷新页面后需要成人重新进入。
           </p>
-          <button
-            class="button primary"
-            :disabled="busy || pin.length !== 6 || pin !== confirmationPin"
-          >
+          <button class="button primary" :disabled="busy">
             {{ busy ? '正在准备…' : '继续选择故事' }}
           </button>
         </form>
@@ -923,7 +896,7 @@ function matchAnswer(item: StoryExercise, id: string) {
           结果仅描述本课匿名练习。每次提交均保留原始条件，不代表个人长期掌握程度。
         </p>
         <button class="button outline" :disabled="busy" @click="makeReport">
-          {{ session.mode === 'adult' ? '生成本课报告 PNG' : '请成人验证并生成报告' }}
+          生成本课报告 PNG
         </button>
         <div class="summary-bottom">
           <article class="paper-card">
@@ -961,19 +934,12 @@ function matchAnswer(item: StoryExercise, id: string) {
                   : '保存一张包含故事配图与英中句子的绘本。'
               }}
             </p>
-            <button class="button primary" :disabled="busy" @click="makeBook">
-              {{ session.mode === 'adult' ? '生成故事书' : '请成人验证并保存' }}
-            </button>
+            <button class="button primary" :disabled="busy" @click="makeBook">生成故事书</button>
           </article>
         </div>
         <div class="action-row">
           <p class="soft small">本课记录只在当前课堂保留，请在结束前保存作品。</p>
-          <button
-            class="button outline"
-            @click="session.mode === 'adult' ? (dialog = 'close') : (dialog = 'adult')"
-          >
-            结束并清理本课
-          </button>
+          <button class="button outline" @click="dialog = 'close'">结束并清理本课</button>
         </div>
       </section>
 
@@ -1009,8 +975,8 @@ function matchAnswer(item: StoryExercise, id: string) {
       </section>
       <section v-else-if="stage === 'recover'" class="paper-card">
         <h1 data-title tabindex="-1">{{ title }}</h1>
-        <p>页面已重新打开，未提交的选择已结束。请成人输入本课口令，查看已提交的结果并重新准备。</p>
-        <button class="button primary" @click="dialog = 'adult'">验证成人身份</button>
+        <p>页面已重新打开，未提交的选择已结束。可以查看已提交的结果并重新准备。</p>
+        <button class="button primary" @click="dialog = 'adult'">查看本课结果</button>
       </section>
       <section v-else-if="stage === 'expired'" class="paper-card">
         <h1 data-title tabindex="-1">{{ title }}</h1>
@@ -1087,24 +1053,10 @@ function matchAnswer(item: StoryExercise, id: string) {
       <h2 id="dialog-title" tabindex="-1">{{ dialogTitle }}</h2>
       <button class="dialog-close" aria-label="关闭对话框" @click="dialog = null">×</button>
       <template v-if="dialog === 'adult'">
-        <p>学习中的课程会在验证后结束，已提交的练习仍可查看。</p>
+        <p>学习中的课程会在进入设置后结束，已提交的练习仍可查看。</p>
         <form @submit.prevent="unlockAdult">
-          <label
-            >6位成人口令<input
-              v-model="unlockPin"
-              type="password"
-              inputmode="numeric"
-              maxlength="6"
-              pattern="[0-9]{6}"
-              autocomplete="current-password"
-              :aria-invalid="Boolean(error)"
-              :aria-describedby="error ? 'adult-error' : undefined"
-              required
-          /></label>
           <p v-if="error" id="adult-error" role="alert" class="invalid">{{ error }}</p>
-          <button class="button primary" :disabled="busy || unlockPin.length !== 6">
-            验证并进入
-          </button>
+          <button class="button primary" :disabled="busy">确认进入</button>
         </form></template
       >
       <template v-else-if="dialog === 'help'">
@@ -1137,32 +1089,23 @@ function matchAnswer(item: StoryExercise, id: string) {
       <template v-else-if="dialog === 'close'">
         <p>本课故事、练习和记录将关闭访问并从在线课堂清理。请先下载需要保留的作品。</p>
         <button class="button outline" @click="dialog = null">留在本课</button
-        ><button
-          v-if="session?.mode === 'adult'"
-          class="button primary"
-          :disabled="busy"
-          @click="close"
-        >
-          确认结束本课</button
-        ><button v-else class="button primary" @click="dialog = 'adult'">
-          先验证成人口令
+        ><button class="button primary" :disabled="busy" @click="close">
+          确认结束本课
         </button></template
       >
       <template v-else-if="dialog === 'guide'">
         <ol>
-          <li>成人设置本课口令，选择自编故事或示例。</li>
+          <li>成人选择自编故事或示例。</li>
           <li>输入中文故事，确认发送范围后生成。</li>
           <li>成人检查全部文字、词卡和练习，再交给孩子。</li>
           <li>逐句阅读，查看词卡，完成三类练习。随时可以求助、休息或结束。</li>
-          <li>成人验证后保存故事书和逐词练习报告，并结束、清理课堂。</li>
+          <li>保存故事书和逐词练习报告，并结束、清理课堂。</li>
         </ol>
-        <p>
-          自编故事提供文字学习，示例配有图片与音频。刷新页面后需要成人验证，未提交的选择无法恢复。
-        </p>
+        <p>自编故事提供文字学习，示例配有图片与音频。刷新页面后未提交的选择无法恢复。</p>
         <button class="button primary" @click="dialog = null">知道了</button></template
       >
       <template v-else-if="dialog === 'privacy'">
-        <p>无需注册，不收集儿童姓名、学校、生日或诊断信息。成人设置的口令只用于本课权限验证。</p>
+        <p>无需注册，不收集儿童姓名、学校、生日或诊断信息。</p>
         <p>
           自编故事仅在成人确认后发送给
           DeepSeek，生成英语句子、词卡和练习。请使用虚构情节，并删除可识别个人的信息。模型输出需要成人逐项审核。
