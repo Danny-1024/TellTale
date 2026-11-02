@@ -1,5 +1,6 @@
 .work-dev/
 .work-docs/
+.scratch/
 outputs/
 **/node_modules/
 **/dist/

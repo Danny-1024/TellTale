@@ -43,7 +43,7 @@ export default {
     try {
       if (pathname === '/api/v1/capabilities' && request.method === 'GET')
         return Response.json(
-          { generation: Boolean(env.DEEPSEEK_API_KEY), model: 'deepseek-flash', version: '1.1.0' },
+          { generation: Boolean(env.DEEPSEEK_API_KEY), model: 'deepseek-flash', version: '1.2.0' },
           { headers },
         );
       const url = new URL(request.url);

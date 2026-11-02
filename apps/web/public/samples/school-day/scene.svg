@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 460" width="640" height="460" role="img">
+  <title>学校</title>
+  <rect width="640" height="460" fill="#d7e7f8"/>
+  <circle cx="520" cy="90" r="42" fill="#3d6ea8"/>
+  <rect x="70" y="250" width="500" height="150" rx="28" fill="#f2c14e"/>
+  <rect x="180" y="160" width="280" height="140" rx="18" fill="#fffaf3"/>
+  <rect x="210" y="190" width="90" height="70" rx="10" fill="#3d6ea8"/>
+  <rect x="330" y="190" width="90" height="70" rx="10" fill="#f2c14e"/>
+</svg>

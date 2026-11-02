@@ -117,6 +117,32 @@ test('real Workers course flow protects answers, persists state, grades attempts
     Origin: 'https://untrusted.example',
   });
   await adult.request('session', { kind: 'class', settings }, 201);
+  const catalog = client();
+  await catalog.request('session', { kind: 'class', settings }, 201);
+  const sampleIds = [
+    'park-morning',
+    'family-dinner',
+    'school-day',
+    'small-pet',
+    'after-rain',
+    'happy-weekend',
+  ];
+  const titles = [];
+  for (const sampleId of sampleIds) {
+    await catalog.command('sample', { sampleId });
+    const item = await catalog.request('course/review');
+    assert.equal(item.lesson.source, 'sample');
+    assert.equal(item.lesson.words.length, 5);
+    assert.equal(item.lesson.exercises.length, 3);
+    assert(item.lesson.sentences.length >= 3 && item.lesson.sentences.length <= 5);
+    titles.push(item.lesson.titleEn);
+  }
+  assert.equal(new Set(titles).size, sampleIds.length);
+  assert.equal(
+    (await catalog.command('sample', { sampleId: 'unknown-story' }, 400)).error.code,
+    'INPUT_INVALID',
+  );
+  await catalog.request('course/close', {});
   const sampleOperation = crypto.randomUUID();
   await adult.command('sample', { operationId: sampleOperation });
   const review = await adult.request('course/review');

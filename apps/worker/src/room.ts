@@ -7,7 +7,13 @@ import type {
   CourseSummary,
   ReviewContent,
 } from '@telltale/contracts';
-import { createContent, generatedSchema, sampleContent, type GeneratedStory } from './content';
+import {
+  createContent,
+  generatedSchema,
+  SAMPLE_IDS,
+  sampleContent,
+  type GeneratedStory,
+} from './content';
 import { generateStory, ProviderError } from './provider';
 import { focusExercises } from './focus';
 import { wordPracticeResults } from './report';
@@ -278,13 +284,20 @@ export class CourseRoom extends DurableObject<Env> {
     let value: unknown;
     if (action === 'sample') {
       adult();
+      // 缺省仍打开原来的公园示例，已有调用不需要额外字段。
+      const data = z
+        .strictObject({
+          operationId: uuid,
+          sampleId: z.enum(SAMPLE_IDS).default('park-morning'),
+        })
+        .parse(input);
       requireCondition(
         state.phase !== 'learning' && !['queued', 'running'].includes(state.job?.status ?? ''),
         409,
         'INVALID_TRANSITION',
         '请先结束当前处理。',
       );
-      state.content = sampleContent();
+      state.content = sampleContent(data.sampleId);
       state.raw = null;
       state.source = '';
       state.phase = 'review';

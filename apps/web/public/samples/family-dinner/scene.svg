@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 460" width="640" height="460" role="img">
+  <title>餐桌</title>
+  <rect width="640" height="460" fill="#f6d7a7"/>
+  <circle cx="520" cy="90" r="42" fill="#e07a3d"/>
+  <rect x="70" y="250" width="500" height="150" rx="28" fill="#7c4a2d"/>
+  <rect x="180" y="160" width="280" height="140" rx="18" fill="#fffaf3"/>
+  <rect x="210" y="190" width="90" height="70" rx="10" fill="#e07a3d"/>
+  <rect x="330" y="190" width="90" height="70" rx="10" fill="#7c4a2d"/>
+</svg>

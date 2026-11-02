@@ -180,9 +180,22 @@ export function createContent(
   };
 }
 
-export function sampleContent(): ReviewContent {
-  const content = createContent(
-    {
+export const SAMPLE_IDS = [
+  'park-morning',
+  'family-dinner',
+  'school-day',
+  'small-pet',
+  'after-rain',
+  'happy-weekend',
+] as const;
+
+export type SampleId = (typeof SAMPLE_IDS)[number];
+
+// 每个示例的选择、配对和填空共同覆盖 2–3 个词语。
+const SAMPLE_STORIES: Record<SampleId, { difficulty: 'L' | 'M' | 'H'; story: unknown }> = {
+  'park-morning': {
+    difficulty: 'L',
+    story: {
       title: '公园的早晨',
       titleEn: 'A Morning at the Park',
       sentences: [
@@ -216,17 +229,212 @@ export function sampleContent(): ReviewContent {
         hint: '小狗追着一个可以滚动的玩具。',
       },
     },
-    'L',
-    'sample',
-  );
-  content.lesson.sentences.forEach((s, i) => {
-    const part = String(i + 1).padStart(2, '0');
-    s.imageUrl = `/samples/park-morning/images/${part}.svg`;
-    s.imageAlt = s.zh;
-    s.audioUrl = `/samples/park-morning/audio/${part}.wav`;
+  },
+  'family-dinner': {
+    difficulty: 'L',
+    story: {
+      title: '温暖的晚饭',
+      titleEn: 'A Warm Dinner',
+      sentences: [
+        { en: 'Ana and Mom cook rice.', zh: '安娜和妈妈做米饭。' },
+        { en: 'The kitchen is warm.', zh: '厨房很温暖。' },
+        { en: 'Dad sets the table.', zh: '爸爸摆好餐桌。' },
+        { en: 'Grandma tells a story.', zh: '奶奶讲了一个故事。' },
+        { en: 'They eat and smile together.', zh: '他们一起吃饭，一起微笑。' },
+      ],
+      words: [
+        { word: 'cook', meaning: '做饭', sentenceIndex: 0 },
+        { word: 'kitchen', meaning: '厨房', sentenceIndex: 1 },
+        { word: 'table', meaning: '桌子', sentenceIndex: 2 },
+        { word: 'story', meaning: '故事', sentenceIndex: 3 },
+        { word: 'smile', meaning: '微笑', sentenceIndex: 4 },
+      ],
+      choice: {
+        prompt: '「厨房」用英语怎么说？',
+        options: ['table', 'kitchen', 'smile'],
+        correct: 1,
+        wordIndex: 1,
+        hint: '做饭的地方就是它。',
+      },
+      match: { wordIndices: [0, 2], hint: '先找做饭的动作，再找吃饭用的桌子。' },
+      cloze: {
+        sentenceIndex: 2,
+        wordIndex: 2,
+        sentence: 'Dad sets the ____.',
+        options: ['story', 'table', 'kitchen'],
+        correct: 1,
+        hint: '吃饭前要先把桌子放好。',
+      },
+    },
+  },
+  'school-day': {
+    difficulty: 'L',
+    story: {
+      title: '上学的一天',
+      titleEn: 'A School Day',
+      sentences: [
+        { en: 'Lily walks to school.', zh: '莉莉走去学校。' },
+        { en: 'She reads a new book.', zh: '她读一本新书。' },
+        { en: 'Her friend draws a cat.', zh: '她的朋友画了一只猫。' },
+        { en: 'The teacher says, "Good job!"', zh: '老师说：“做得很好！”' },
+        { en: 'They play in the yard.', zh: '他们在院子里玩耍。' },
+      ],
+      words: [
+        { word: 'school', meaning: '学校', sentenceIndex: 0 },
+        { word: 'book', meaning: '书', sentenceIndex: 1 },
+        { word: 'cat', meaning: '猫', sentenceIndex: 2 },
+        { word: 'teacher', meaning: '老师', sentenceIndex: 3 },
+        { word: 'play', meaning: '玩耍', sentenceIndex: 4 },
+      ],
+      choice: {
+        prompt: '「老师」用英语怎么说？',
+        options: ['teacher', 'book', 'school'],
+        correct: 0,
+        wordIndex: 3,
+        hint: '课堂里帮助我们学习的人。',
+      },
+      match: { wordIndices: [1, 2], hint: '一本可以读的书，一只会画出来的猫。' },
+      cloze: {
+        sentenceIndex: 1,
+        wordIndex: 1,
+        sentence: 'She reads a new ____.',
+        options: ['cat', 'book', 'play'],
+        correct: 1,
+        hint: '可以一页一页读的东西。',
+      },
+    },
+  },
+  'small-pet': {
+    difficulty: 'L',
+    story: {
+      title: '我的小宠物',
+      titleEn: 'My Small Pet',
+      sentences: [
+        { en: 'Ben has a small cat.', zh: '本有一只小猫。' },
+        { en: 'The cat drinks milk.', zh: '小猫喝牛奶。' },
+        { en: 'Ben feeds the fish.', zh: '本喂小鱼。' },
+        { en: 'The cat sleeps on the bed.', zh: '小猫在床上睡觉。' },
+        { en: 'Ben gives it a soft hug.', zh: '本轻轻地抱抱它。' },
+      ],
+      words: [
+        { word: 'cat', meaning: '猫', sentenceIndex: 0 },
+        { word: 'milk', meaning: '牛奶', sentenceIndex: 1 },
+        { word: 'fish', meaning: '鱼', sentenceIndex: 2 },
+        { word: 'bed', meaning: '床', sentenceIndex: 3 },
+        { word: 'hug', meaning: '拥抱', sentenceIndex: 4 },
+      ],
+      choice: {
+        prompt: '「牛奶」用英语怎么说？',
+        options: ['milk', 'fish', 'bed'],
+        correct: 0,
+        wordIndex: 1,
+        hint: '小猫喝的白色饮品。',
+      },
+      match: { wordIndices: [2, 3], hint: '一条水里的小鱼，一个软软的睡觉地方。' },
+      cloze: {
+        sentenceIndex: 2,
+        wordIndex: 2,
+        sentence: 'Ben feeds the ____.',
+        options: ['milk', 'fish', 'bed'],
+        correct: 1,
+        hint: '本喂的是水里的小动物。',
+      },
+    },
+  },
+  'after-rain': {
+    difficulty: 'L',
+    story: {
+      title: '雨后的一天',
+      titleEn: 'After the Rain',
+      sentences: [
+        { en: 'It rains in the morning.', zh: '早上下雨了。' },
+        { en: 'Ana opens her umbrella.', zh: '安娜打开雨伞。' },
+        { en: 'She jumps over a puddle.', zh: '她跳过一个水坑。' },
+        { en: 'The sun comes out.', zh: '太阳出来了。' },
+        { en: 'She sees a rainbow.', zh: '她看见一道彩虹。' },
+      ],
+      words: [
+        { word: 'rains', meaning: '下雨', sentenceIndex: 0 },
+        { word: 'umbrella', meaning: '雨伞', sentenceIndex: 1 },
+        { word: 'puddle', meaning: '水坑', sentenceIndex: 2 },
+        { word: 'sun', meaning: '太阳', sentenceIndex: 3 },
+        { word: 'rainbow', meaning: '彩虹', sentenceIndex: 4 },
+      ],
+      choice: {
+        prompt: '「彩虹」用英语怎么说？',
+        options: ['sun', 'rainbow', 'puddle'],
+        correct: 1,
+        wordIndex: 4,
+        hint: '雨后天上有七种颜色。',
+      },
+      match: { wordIndices: [1, 3], hint: '下雨时打开，天晴时出现。' },
+      cloze: {
+        sentenceIndex: 3,
+        wordIndex: 3,
+        sentence: 'The ____ comes out.',
+        options: ['umbrella', 'rainbow', 'sun'],
+        correct: 2,
+        hint: '雨停以后，天上亮起来。',
+      },
+    },
+  },
+  'happy-weekend': {
+    difficulty: 'L',
+    story: {
+      title: '开心的周末',
+      titleEn: 'A Happy Weekend',
+      sentences: [
+        { en: 'Leo visits Grandma.', zh: '利奥去看奶奶。' },
+        { en: 'They make a cake.', zh: '他们做了一个蛋糕。' },
+        { en: 'Leo reads a story.', zh: '利奥读了一个故事。' },
+        { en: 'Grandma sings a song.', zh: '奶奶唱了一首歌。' },
+        { en: 'Leo draws a picture.', zh: '利奥画了一幅画。' },
+      ],
+      words: [
+        { word: 'grandma', meaning: '奶奶', sentenceIndex: 0 },
+        { word: 'cake', meaning: '蛋糕', sentenceIndex: 1 },
+        { word: 'story', meaning: '故事', sentenceIndex: 2 },
+        { word: 'song', meaning: '歌', sentenceIndex: 3 },
+        { word: 'picture', meaning: '画', sentenceIndex: 4 },
+      ],
+      choice: {
+        prompt: '「蛋糕」用英语怎么说？',
+        options: ['cake', 'song', 'picture'],
+        correct: 0,
+        wordIndex: 1,
+        hint: '甜甜的、可以分享的食物。',
+      },
+      match: { wordIndices: [2, 3], hint: '可以读的故事，也可以唱一首歌。' },
+      cloze: {
+        sentenceIndex: 2,
+        wordIndex: 2,
+        sentence: 'Leo reads a ____.',
+        options: ['cake', 'story', 'song'],
+        correct: 1,
+        hint: '可以一页一页读的东西。',
+      },
+    },
+  },
+};
+
+export function sampleContent(sampleId: SampleId = 'park-morning'): ReviewContent {
+  const sample = SAMPLE_STORIES[sampleId]!;
+  const content = createContent(sample.story, sample.difficulty, 'sample');
+  const knownWords = new Set(['park', 'mom', 'dog', 'ball', 'tail']);
+  content.lesson.words.forEach((word) => {
+    if (knownWords.has(word.word)) word.imageUrl = `/spots/${word.word}.svg`;
   });
-  content.lesson.words.forEach((w) => {
-    w.imageUrl = `/spots/${w.word}.svg`;
-  });
+  if (sampleId === 'park-morning') {
+    content.lesson.sentences.forEach((sentence, index) => {
+      const part = String(index + 1).padStart(2, '0');
+      sentence.imageUrl = `/samples/park-morning/images/${part}.svg`;
+      sentence.imageAlt = sentence.zh;
+      sentence.audioUrl = `/samples/park-morning/audio/${part}.wav`;
+    });
+  } else {
+    // 其他静态示例暂不提供录制的示例音频；本地朗读会作为可选声音支持。
+    content.lesson.sentences[0]!.imageUrl = `/samples/${sampleId}/scene.svg`;
+    content.lesson.sentences[0]!.imageAlt = content.lesson.sentences[0]!.zh;
+  }
   return content;
 }
