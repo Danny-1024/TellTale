@@ -11,6 +11,7 @@ export default defineConfig([
     '**/dist/**',
     '.work-dev/**',
     '.work-docs/**',
+    '.scratch/**',
     'outputs/**',
     'coverage/**',
     'references/**',

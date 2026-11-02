@@ -1,8 +1,11 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
 import { inspectStoryInput, reviewIssues } from '@telltale/contracts';
 import * as api from './api';
-import { LessonAudio, renderBook, renderPracticeReport } from './media';
+import { appendStoryPrompt, courseEntry, STORY_PROMPTS } from './experience';
+import { LessonAudio, renderBook, renderPracticeReport, speechRate } from './media';
+import { type SampleId } from './sampleCatalog';
 
 export function useCourse() {
   const stage = ref('home');
@@ -12,7 +15,13 @@ export function useCourse() {
     error = ref(''),
     loading = ref(true),
     playing = ref(false);
+  const playback = ref<'audio' | 'speech' | null>(null);
+  const route = useRoute();
   const chosen = ref<'sample' | 'custom'>('custom');
+  const sampleId = ref<SampleId>('park-morning');
+  const speechNotice = ref('');
+  const reviewTab = ref<'story' | 'words' | 'exercises' | 'focus'>('story');
+  const storyPrompts = STORY_PROMPTS;
   const story = ref(''),
     confirmed = ref(false),
     difficulty = ref<'L' | 'M' | 'H'>('L');
@@ -47,8 +56,9 @@ export function useCourse() {
     bookUrl.value = '';
     reportUrl.value = '';
   }
-  const audio = new LessonAudio((value) => {
+  const audio = new LessonAudio((value, kind) => {
     playing.value = value;
+    playback.value = kind;
   });
   let interval: ReturnType<typeof setInterval> | undefined;
   let polling = false;
@@ -116,7 +126,20 @@ export function useCourse() {
     review.value = await api.getReview();
     focusWordIds.value = [...savedFocus.value];
     checks.value = [false, false, false, false, false];
+    reviewTab.value = 'story';
     move('review');
+  }
+  function applyEntryQuery() {
+    const entry = courseEntry(route.query);
+    chosen.value = entry.chosen;
+    if (entry.sampleId) sampleId.value = entry.sampleId;
+  }
+  function selectSample(id: SampleId) {
+    chosen.value = 'sample';
+    sampleId.value = id;
+  }
+  function insertPrompt(label: string) {
+    story.value = appendStoryPrompt(story.value, label);
   }
   async function apply(result: api.CourseResult, fromRefresh = false) {
     // 旧版本完成回执升级时，重新读取服务端逐词投影，保留真实原始记录。
@@ -141,7 +164,8 @@ export function useCourse() {
   }
   async function chooseStory() {
     await act(async () => {
-      if (chosen.value === 'sample') await apply(await api.command('sample'));
+      if (chosen.value === 'sample')
+        await apply(await api.command('sample', { sampleId: sampleId.value }));
       else {
         confirmed.value = false;
         move('input');
@@ -230,11 +254,23 @@ export function useCourse() {
       wordIndex.value = index;
     });
   }
+  async function speakText(text: string | null | undefined) {
+    if (!text) return;
+    speechNotice.value = '';
+    try {
+      await audio.speak(text, speechRate(lesson.value?.difficulty ?? difficulty.value));
+    } catch (cause) {
+      speechNotice.value =
+        cause instanceof Error ? cause.message : '朗读没有完成，仍可以阅读文字。';
+    }
+  }
   async function toggleAudio(url: string | null, isReplay = false) {
-    if (playing.value) {
+    // 示例音频和本地朗读共用停止入口，正在朗读时仍可改播示例音频。
+    if (playback.value === 'audio') {
       audio.stop();
       return;
     }
+    if (playing.value) audio.stop();
     await act(async () => {
       if (!url) return;
       if (isReplay && exercise.value) await api.recordEvent('replay', exercise.value.id);
@@ -381,6 +417,8 @@ export function useCourse() {
         error.value = cause instanceof Error ? cause.message : '无法读取课程。';
     } finally {
       loading.value = false;
+      applyEntryQuery();
+      if (!session.value && (route.query.sample || route.query.mode === 'custom')) move('setup');
     }
     document.addEventListener('visibilitychange', background);
     window.addEventListener('pagehide', stopAudio);
@@ -432,7 +470,14 @@ export function useCourse() {
     error,
     loading,
     playing,
+    playback,
     chosen,
+    sampleId,
+    speechNotice,
+    reviewTab,
+    storyPrompts,
+    selectSample,
+    insertPrompt,
     story,
     confirmed,
     difficulty,
@@ -476,6 +521,7 @@ export function useCourse() {
     visitSentence,
     showWord,
     toggleAudio,
+    speakText,
     practice,
     answer,
     retry,

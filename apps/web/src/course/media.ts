@@ -1,16 +1,25 @@
 import type { StoryLesson, PracticeReport } from '@telltale/contracts';
 import { wordResultLabels } from '@telltale/contracts';
 
+export function speechRate(difficulty: 'L' | 'M' | 'H'): number {
+  if (difficulty === 'L') return 0.85;
+  if (difficulty === 'H') return 1.1;
+  return 1;
+}
+
 export class LessonAudio {
   private audio: HTMLAudioElement | null = null;
-  constructor(private changed: (playing: boolean) => void) {}
+  private utterance: SpeechSynthesisUtterance | null = null;
+  constructor(private changed: (playing: boolean, kind: 'audio' | 'speech' | null) => void) {}
   stop() {
     if (this.audio) {
       this.audio.pause();
       this.audio.currentTime = 0;
       this.audio = null;
     }
-    this.changed(false);
+    this.utterance = null;
+    if ('speechSynthesis' in globalThis) globalThis.speechSynthesis.cancel();
+    this.changed(false, null);
   }
   async play(url: string, volume: number) {
     this.stop();
@@ -19,7 +28,39 @@ export class LessonAudio {
     audio.volume = volume;
     audio.addEventListener('ended', () => this.stop(), { once: true });
     await audio.play();
-    if (this.audio === audio) this.changed(true);
+    if (this.audio === audio) this.changed(true, 'audio');
+  }
+  // 只使用浏览器本地语音。离开页面、切换句子或进入后台时由 stop 取消。
+  // 没有语音时返回拒绝的 Promise，调用方可以继续保留文字学习。
+  speak(text: string, rate: number): Promise<void> {
+    this.stop();
+    const synthesis = 'speechSynthesis' in globalThis ? globalThis.speechSynthesis : null;
+    if (!synthesis || typeof synthesis.speak !== 'function') {
+      return Promise.reject(new Error('当前浏览器没有可用的朗读语音，仍可以阅读文字。'));
+    }
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = rate;
+    this.utterance = utterance;
+    return new Promise((resolve, reject) => {
+      utterance.onend = () => {
+        if (this.utterance === utterance) this.utterance = null;
+        this.changed(false, null);
+        resolve();
+      };
+      utterance.onerror = (event) => {
+        const reason = 'error' in event ? String(event.error) : '';
+        if (this.utterance === utterance) this.utterance = null;
+        this.changed(false, null);
+        if (reason === 'canceled' || reason === 'interrupted') {
+          resolve();
+          return;
+        }
+        reject(new Error('朗读没有完成，仍可以阅读文字。'));
+      };
+      synthesis.speak(utterance);
+      this.changed(true, 'speech');
+    });
   }
 }
 

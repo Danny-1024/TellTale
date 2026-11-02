@@ -1359,3 +1359,94 @@ select {
 .child-course .learning-footer {
   flex-shrink: 0;
 }
+
+.course-app {
+  overflow-x: clip;
+}
+.top-links a {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: 0;
+  color: inherit;
+  font-size: 16px;
+  min-height: 56px;
+  min-width: 56px;
+  padding: 8px;
+  text-decoration: none;
+}
+.sample-theme {
+  margin-top: 28px;
+}
+.sample-grid,
+.prompt-row,
+.review-tabs,
+.sentence-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.sample-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  margin: 16px 0;
+}
+.sample-card {
+  display: grid;
+  gap: 8px;
+  text-align: left;
+}
+.lesson-progress {
+  height: 10px;
+  background: #d8eafc;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.lesson-progress span {
+  display: block;
+  height: 100%;
+  background: #2f6f9f;
+}
+.review-tabs button,
+.sentence-nav button,
+.prompt-row button {
+  min-height: 44px;
+}
+.status-line {
+  margin: 12px 3.5%;
+}
+
+@media (max-width: 380px) {
+  .brand {
+    font-size: 18px;
+    gap: 6px;
+    white-space: normal;
+  }
+  .brand > span:last-child {
+    font-size: 14px;
+  }
+  .brand-mark {
+    width: 32px;
+    height: 32px;
+    font-size: 24px;
+  }
+  .topbar {
+    align-items: flex-start;
+  }
+  .top-links {
+    width: 100%;
+    margin-left: 0;
+  }
+  .top-links a,
+  .top-links button {
+    min-width: 0;
+    padding: 8px 6px;
+  }
+  .hero h1,
+  .story-copy h1 {
+    font-size: 34px;
+  }
+  .content {
+    width: calc(100% - 24px);
+  }
+}

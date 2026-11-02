@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { adjacentSentence, REVIEW_TABS } from './experience';
 import { useCourse } from './useCourse';
+import { SAMPLE_CATALOG } from './sampleCatalog';
 import type { StoryExercise } from '@telltale/contracts';
 import { wordResultLabels } from '@telltale/contracts';
 
@@ -12,7 +14,14 @@ const {
   error,
   loading,
   playing,
+  playback,
   chosen,
+  sampleId,
+  speechNotice,
+  reviewTab,
+  storyPrompts,
+  selectSample,
+  insertPrompt,
   story,
   confirmed,
   inputIssue,
@@ -55,6 +64,7 @@ const {
   visitSentence,
   showWord,
   toggleAudio,
+  speakText,
   practice,
   answer,
   retry,
@@ -124,6 +134,25 @@ let wordTrigger: HTMLElement | null = null;
 function focusTitle() {
   document.querySelector<HTMLElement>('main [data-title]')?.focus();
 }
+function onCourseKey(event: KeyboardEvent) {
+  trapDialogFocus(event);
+  if (dialog.value || stage.value !== 'listen') return;
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+  const target = event.target;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  )
+    return;
+  event.preventDefault();
+  const next = adjacentSentence(
+    sentenceIndex.value,
+    lesson.value?.sentences.length ?? 0,
+    event.key === 'ArrowLeft' ? -1 : 1,
+  );
+  if (next !== null) void visitSentence(next);
+}
 function trapDialogFocus(event: KeyboardEvent) {
   if (event.key !== 'Tab' || !modal.value?.open) return;
   const controls = [
@@ -140,8 +169,8 @@ function trapDialogFocus(event: KeyboardEvent) {
     : (index + 1) % controls.length;
   controls[next]?.focus();
 }
-onMounted(() => document.addEventListener('keydown', trapDialogFocus));
-onUnmounted(() => document.removeEventListener('keydown', trapDialogFocus));
+onMounted(() => document.addEventListener('keydown', onCourseKey));
+onUnmounted(() => document.removeEventListener('keydown', onCourseKey));
 watch(busy, async (value) => {
   if (value || !dialog.value) return;
   await nextTick();
@@ -205,7 +234,10 @@ function matchAnswer(item: StoryExercise, id: string) {
   >
     <a class="skip-link" href="#course-main" @click.prevent="focusTitle">跳到当前任务</a>
     <header class="topbar">
-      <a href="/" class="brand" @click.prevent="session ? (dialog = 'close') : move('home')"
+      <a
+        href="/"
+        class="brand"
+        @click="session ? ($event.preventDefault(), (dialog = 'close')) : undefined"
         ><span class="brand-mark" aria-hidden="true">t</span> TellTale <span>English</span></a
       >
       <p class="progress-pill" role="status" aria-live="polite" aria-atomic="true">
@@ -214,9 +246,10 @@ function matchAnswer(item: StoryExercise, id: string) {
       <button v-if="session && isChild" class="button outline compact" @click="dialog = 'adult'">
         成人设置
       </button>
-      <nav v-else class="top-links" aria-label="使用帮助">
-        <button @click="dialog = 'guide'">使用指南</button
-        ><button @click="dialog = 'privacy'">隐私说明</button>
+      <nav v-else class="top-links" aria-label="页面">
+        <RouterLink to="/guide">使用指南</RouterLink>
+        <RouterLink to="/privacy">隐私说明</RouterLink>
+        <RouterLink to="/about">关于</RouterLink>
       </nav>
     </header>
     <div v-if="error" id="course-error" class="error-banner" role="alert">
@@ -346,6 +379,21 @@ function matchAnswer(item: StoryExercise, id: string) {
             }}</span>
           </button>
         </div>
+        <div v-if="chosen === 'sample'" class="sample-grid" role="listbox" aria-label="示例课程">
+          <button
+            v-for="item in SAMPLE_CATALOG"
+            :key="item.id"
+            type="button"
+            class="sample-card paper-card"
+            :class="{ chosen: sampleId === item.id }"
+            :aria-pressed="sampleId === item.id"
+            @click="selectSample(item.id)"
+          >
+            <span class="eyebrow">{{ item.theme }} · {{ item.difficultyLabel }}</span>
+            <strong>{{ item.title }}</strong>
+            <span lang="en">{{ item.preview }}</span>
+          </button>
+        </div>
         <div class="action-row">
           <p class="soft">读故事 → 看词卡 → 做练习 → 保存故事书</p>
           <button class="button primary" :disabled="busy" @click="chooseStory">
@@ -356,6 +404,18 @@ function matchAnswer(item: StoryExercise, id: string) {
 
       <section v-else-if="stage === 'input'" class="paper-card">
         <p class="eyebrow">我的故事 · 成人录入</p>
+        <div class="prompt-row" aria-label="故事提示">
+          <button
+            v-for="[name, label] in storyPrompts"
+            :key="name"
+            type="button"
+            class="button outline compact"
+            @click="insertPrompt(label)"
+          >
+            {{ name }}
+          </button>
+        </div>
+        <p class="soft small">提示只帮助组织中文故事，仍需检查全文、难度和发送确认。</p>
         <h1 data-title tabindex="-1">{{ title }}</h1>
         <p>今天发生了什么？也可以编一个小故事。建议20–150字。</p>
         <label for="story">中文故事</label
@@ -414,7 +474,9 @@ function matchAnswer(item: StoryExercise, id: string) {
         <span class="waiting-orbit" aria-hidden="true">✦</span>
         <p class="eyebrow">我的故事</p>
         <h1 data-title tabindex="-1">{{ title }}</h1>
-        <p role="status" aria-live="polite" aria-atomic="true">{{ session?.job?.stage }}</p>
+        <p role="status" aria-live="polite" aria-atomic="true">
+          {{ session?.job?.stage || '正在准备故事。' }}
+        </p>
         <p class="soft">生成完成后，请成人检查每句话和每道练习。</p>
         <button class="button outline" :disabled="busy" @click="cancelGeneration">取消生成</button>
       </section>
@@ -545,81 +607,122 @@ function matchAnswer(item: StoryExercise, id: string) {
           </div>
         </template>
         <template v-else>
-          <div class="review-grid">
-            <div class="review-story paper-card">
-              <h2>{{ review.lesson.title }}</h2>
-              <p lang="en">{{ review.lesson.titleEn }}</p>
-              <article
-                v-for="(line, index) in review.lesson.sentences"
-                :key="line.id"
-                class="review-sentence"
-              >
-                <span>{{ String(index + 1).padStart(2, '0') }}</span>
-                <div>
-                  <p lang="en">{{ line.en }}</p>
-                  <p class="soft">{{ line.zh }}</p>
-                </div>
-                <img v-if="line.imageUrl" :src="line.imageUrl" :alt="line.imageAlt ?? ''" />
-              </article>
-            </div>
-            <div class="review-side">
-              <div class="paper-card">
-                <h2>5个故事词语</h2>
-                <p v-for="item in review.lesson.words" :key="item.id">
-                  <strong lang="en">{{ item.word }}</strong> · {{ item.meaning }}
-                </p>
-              </div>
-              <div class="paper-card">
-                <h2>3道练习</h2>
-                <article
-                  v-for="item in review.lesson.exercises"
-                  :key="item.id"
-                  class="review-exercise"
-                >
-                  <h3>{{ item.prompt }}</h3>
-                  <p v-if="item.sentence" lang="en">{{ item.sentence }}</p>
-                  <template v-if="item.type === 'match'"
-                    ><p v-for="left in item.left" :key="left.id">
-                      {{ left.text }} → {{ matchAnswer(item, left.id) }}
-                    </p></template
-                  ><template v-else
-                    ><p>选项：{{ item.options.map((option) => option.text).join(' / ') }}</p>
-                    <p>
-                      答案：<strong>{{
-                        item.options.find((option) => option.id === review!.answers[item.id])?.text
-                      }}</strong>
-                    </p></template
-                  >
-                </article>
-              </div>
-            </div>
-          </div>
-          <fieldset v-if="review.raw" class="paper-card focus-picker">
-            <legend>选择本课重点词（2–3个）</legend>
-            <p>练习会覆盖所选词语，故事原文保持不变。更新练习后请重新检查答案。</p>
-            <label v-for="item in review.lesson.words" :key="item.id" class="check">
-              <input
-                v-model="focusWordIds"
-                type="checkbox"
-                :value="item.id"
-                :disabled="busy || (!focusWordIds.includes(item.id) && focusWordIds.length >= 3)"
-              />
-              <span lang="en">{{ item.word }}</span> · {{ item.meaning }}
-            </label>
-            <p role="status">
-              已选择{{ focusWordIds.length }}个重点词{{
-                focusChanged ? '，需要更新练习并重新审核。' : '。'
-              }}
-            </p>
+          <ul v-if="editIssues.length" role="alert" class="notice">
+            <li v-for="issue in editIssues" :key="issue">{{ issue }}</li>
+          </ul>
+          <p v-else class="soft small">当前内容已通过结构检查。儿童只会看到审核后的句子和词卡。</p>
+          <div class="review-tabs" role="tablist" aria-label="审核内容">
             <button
-              class="button outline"
-              :disabled="
-                busy || !focusChanged || focusWordIds.length < 2 || focusWordIds.length > 3
-              "
-              @click="saveFocus"
+              v-for="[id, label] in REVIEW_TABS"
+              :id="`review-tab-${id}`"
+              :key="id"
+              type="button"
+              role="tab"
+              :aria-selected="reviewTab === id"
+              :aria-controls="`review-panel-${id}`"
+              @click="reviewTab = id"
             >
-              更新三类练习
+              {{ label }}
             </button>
+          </div>
+          <div
+            v-show="reviewTab === 'story'"
+            id="review-panel-story"
+            class="review-story paper-card"
+            role="tabpanel"
+            aria-labelledby="review-tab-story"
+          >
+            <p class="eyebrow">儿童预览</p>
+            <h2>{{ review.lesson.title }}</h2>
+            <p lang="en">{{ review.lesson.titleEn }}</p>
+            <article
+              v-for="(line, index) in review.lesson.sentences"
+              :key="line.id"
+              class="review-sentence"
+            >
+              <span>{{ String(index + 1).padStart(2, '0') }}</span>
+              <div>
+                <p lang="en">{{ line.en }}</p>
+                <p class="soft">{{ line.zh }}</p>
+              </div>
+              <img v-if="line.imageUrl" :src="line.imageUrl" :alt="line.imageAlt ?? ''" />
+            </article>
+          </div>
+          <div
+            v-show="reviewTab === 'words'"
+            id="review-panel-words"
+            class="paper-card"
+            role="tabpanel"
+            aria-labelledby="review-tab-words"
+          >
+            <h2>5个故事词语</h2>
+            <p v-if="!review.lesson.words.length">这一课还没有词卡。</p>
+            <p v-for="item in review.lesson.words" :key="item.id">
+              <strong lang="en">{{ item.word }}</strong> · {{ item.meaning }}
+            </p>
+          </div>
+          <div
+            v-show="reviewTab === 'exercises'"
+            id="review-panel-exercises"
+            class="paper-card"
+            role="tabpanel"
+            aria-labelledby="review-tab-exercises"
+          >
+            <h2>3道练习</h2>
+            <p v-if="!review.lesson.exercises.length">这一课还没有练习。</p>
+            <article v-for="item in review.lesson.exercises" :key="item.id" class="review-exercise">
+              <h3>{{ item.prompt }}</h3>
+              <p v-if="item.sentence" lang="en">{{ item.sentence }}</p>
+              <template v-if="item.type === 'match'">
+                <p v-for="left in item.left" :key="left.id">
+                  {{ left.text }} → {{ matchAnswer(item, left.id) }}
+                </p>
+              </template>
+              <template v-else>
+                <p>选项：{{ item.options.map((option) => option.text).join(' / ') }}</p>
+                <p>
+                  答案：<strong>{{
+                    item.options.find((option) => option.id === review!.answers[item.id])?.text
+                  }}</strong>
+                </p>
+              </template>
+            </article>
+          </div>
+          <fieldset
+            v-show="reviewTab === 'focus'"
+            id="review-panel-focus"
+            class="paper-card focus-picker"
+            role="tabpanel"
+            aria-labelledby="review-tab-focus"
+          >
+            <legend>选择本课重点词（2–3个）</legend>
+            <p v-if="!review.raw">示例课程使用已准备好的练习。自编故事可以在这里更换重点词。</p>
+            <template v-else>
+              <p>练习会覆盖所选词语，故事原文保持不变。更新练习后请重新检查答案。</p>
+              <label v-for="item in review.lesson.words" :key="item.id" class="check">
+                <input
+                  v-model="focusWordIds"
+                  type="checkbox"
+                  :value="item.id"
+                  :disabled="busy || (!focusWordIds.includes(item.id) && focusWordIds.length >= 3)"
+                />
+                <span lang="en">{{ item.word }}</span> · {{ item.meaning }}
+              </label>
+              <p role="status">
+                已选择{{ focusWordIds.length }}个重点词{{
+                  focusChanged ? '，需要更新练习并重新审核。' : '。'
+                }}
+              </p>
+              <button
+                class="button outline"
+                :disabled="
+                  busy || !focusChanged || focusWordIds.length < 2 || focusWordIds.length > 3
+                "
+                @click="saveFocus"
+              >
+                更新三类练习
+              </button>
+            </template>
           </fieldset>
           <section class="approval paper-card">
             <h2>我已逐项检查</h2>
@@ -678,6 +781,34 @@ function matchAnswer(item: StoryExercise, id: string) {
         </div>
         <div class="story-copy">
           <p class="eyebrow">{{ sourceLabel }}</p>
+          <div
+            class="lesson-progress"
+            role="progressbar"
+            :aria-valuenow="sentenceIndex + 1"
+            aria-valuemin="1"
+            :aria-valuemax="lesson?.sentences.length ?? 1"
+            :aria-valuetext="progress"
+          >
+            <span
+              :style="{
+                width: `${((sentenceIndex + 1) / (lesson?.sentences.length || 1)) * 100}%`,
+              }"
+            ></span>
+          </div>
+          <p role="status">{{ progress }}</p>
+          <div class="sentence-nav" role="navigation" aria-label="句子列表">
+            <button
+              v-for="(item, index) in lesson?.sentences"
+              :key="item.id"
+              type="button"
+              :aria-current="index === sentenceIndex ? 'true' : undefined"
+              :aria-label="`第 ${index + 1} 句`"
+              :disabled="busy"
+              @click="visitSentence(index)"
+            >
+              {{ index + 1 }}
+            </button>
+          </div>
           <h1 data-title tabindex="-1" class="english-sentence" lang="en">{{ sentence.en }}</h1>
           <p v-if="settings.showChinese" class="translation">{{ sentence.zh }}</p>
           <button
@@ -686,8 +817,16 @@ function matchAnswer(item: StoryExercise, id: string) {
             :disabled="busy"
             @click="toggleAudio(sentence.audioUrl)"
           >
-            {{ playing ? '■ 停止播放' : '▶ 播放这句话' }}
+            {{ playback === 'audio' ? '■ 停止播放' : '▶ 播放这句话' }}
           </button>
+          <button
+            type="button"
+            class="button outline"
+            @click="playback === 'speech' ? toggleAudio(null) : speakText(sentence.en)"
+          >
+            {{ playback === 'speech' ? '停止朗读' : '朗读这句话' }}
+          </button>
+          <p v-if="speechNotice" role="status">{{ speechNotice }}</p>
           <div class="word-tabs" role="group" aria-label="故事词卡">
             <button
               v-for="(item, index) in lesson?.words"
@@ -706,6 +845,9 @@ function matchAnswer(item: StoryExercise, id: string) {
               <h2 lang="en" tabindex="-1">{{ word.word }}</h2>
               <p>{{ word.meaning }}</p>
               <p lang="en" class="word-example">{{ wordExample }}</p>
+              <button type="button" class="button outline compact" @click="speakText(word.word)">
+                朗读这个词
+              </button>
             </div>
             <button class="word-close" aria-label="关闭词卡" @click="showWord(null)">×</button>
           </section>
@@ -895,6 +1037,12 @@ function matchAnswer(item: StoryExercise, id: string) {
         <p class="soft small">
           结果仅描述本课匿名练习。每次提交均保留原始条件，不代表个人长期掌握程度。
         </p>
+        <section class="paper-card">
+          <h2>下一课可以这样准备</h2>
+          <p>
+            先想好一个人物、一个地点和一件小事。下一课仍从新的临时课堂开始，不会自动带上这次记录。
+          </p>
+        </section>
         <button class="button outline" :disabled="busy" @click="makeReport">
           生成本课报告 PNG
         </button>
@@ -982,6 +1130,14 @@ function matchAnswer(item: StoryExercise, id: string) {
         <h1 data-title tabindex="-1">{{ title }}</h1>
         <p>课程有效期已结束。可以由成人重新准备一节课。</p>
         <button class="button primary" @click="move('setup')">准备新课</button>
+      </section>
+      <section v-else class="paper-card">
+        <h1 data-title tabindex="-1">这一页还没有内容</h1>
+        <p>当前步骤还没有可显示的课程内容。可以返回准备，或回到首页选择示例。</p>
+        <div class="action-row">
+          <button class="button outline" type="button" @click="move('setup')">返回准备</button>
+          <RouterLink class="button primary" to="/">回到首页</RouterLink>
+        </div>
       </section>
     </main>
 
