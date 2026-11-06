@@ -795,7 +795,8 @@ function matchAnswer(item: StoryExercise, id: string) {
               }"
             ></span>
           </div>
-          <p role="status">{{ progress }}</p>
+          <!-- 页头进度已经播报当前位置，这里只显示文字，避免读屏重复。 -->
+          <p>{{ progress }}</p>
           <div class="sentence-nav" role="navigation" aria-label="句子列表">
             <button
               v-for="(item, index) in lesson?.sentences"
