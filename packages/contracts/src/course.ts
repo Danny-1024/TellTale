@@ -107,6 +107,7 @@ export interface CourseJob {
 
 export interface CourseSnapshot {
   id: string;
+  favoriteWordIds: string[];
   mode: 'adult' | 'child';
   phase: 'prepare' | 'review' | 'learning' | 'finished';
   kind: 'sample' | 'class';

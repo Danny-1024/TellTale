@@ -90,6 +90,10 @@ export class CourseRoom extends DurableObject<Env> {
       state.mode === 'adult' || Boolean(runtime && equalToken(runtime, state.runtime));
     return {
       id: state.id,
+      // 收藏使用当前课堂的词卡事件，旧课堂自然得到空列表。
+      favoriteWordIds: canRead
+        ? state.events.filter((event) => event.kind === 'favorite').map((event) => event.targetId)
+        : [],
       mode: state.mode,
       phase: state.phase,
       kind: state.kind,
@@ -501,7 +505,16 @@ export class CourseRoom extends DurableObject<Env> {
       const data = z
         .strictObject({
           operationId: uuid,
-          kind: z.enum(['sentence', 'word', 'hint', 'adultHelp', 'replay', 'rest']),
+          kind: z.enum([
+            'sentence',
+            'word',
+            'favorite',
+            'unfavorite',
+            'hint',
+            'adultHelp',
+            'replay',
+            'rest',
+          ]),
           targetId: z.string().max(36),
         })
         .parse(input);
@@ -510,11 +523,15 @@ export class CourseRoom extends DurableObject<Env> {
         data.kind === 'rest' ||
         (data.kind === 'sentence'
           ? lesson.sentences.some((s) => s.id === data.targetId)
-          : data.kind === 'word'
+          : ['word', 'favorite', 'unfavorite'].includes(data.kind)
             ? lesson.words.some((w) => w.id === data.targetId)
             : lesson.exercises.some((e) => e.id === data.targetId));
       requireCondition(allowed, 400, 'TARGET_INVALID', '学习项目已失效。');
-      if (!state.events.some((e) => e.kind === data.kind && e.targetId === data.targetId))
+      if (data.kind === 'unfavorite')
+        state.events = state.events.filter(
+          (event) => !(event.kind === 'favorite' && event.targetId === data.targetId),
+        );
+      else if (!state.events.some((e) => e.kind === data.kind && e.targetId === data.targetId))
         state.events.push({ kind: data.kind, targetId: data.targetId });
       value =
         data.kind === 'hint' ? { hint: state.content!.hints[data.targetId] } : { recorded: true };

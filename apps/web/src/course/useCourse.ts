@@ -63,6 +63,17 @@ export function useCourse() {
   let interval: ReturnType<typeof setInterval> | undefined;
   let polling = false;
   const lesson = computed(() => session.value?.lesson ?? null);
+  const favoriteWords = computed(
+    () =>
+      lesson.value?.words.filter((item) => session.value?.favoriteWordIds?.includes(item.id)) ?? [],
+  );
+  async function setFavorite(wordId: string, saved: boolean) {
+    await act(async () => {
+      await api.recordEvent(saved ? 'favorite' : 'unfavorite', wordId);
+      // 读取服务端最新收藏，重复请求也使用本课当前的列表。
+      session.value = (await api.loadSession()).session;
+    });
+  }
   const sentence = computed(() => lesson.value?.sentences[sentenceIndex.value] ?? null);
   const word = computed(() =>
     wordIndex.value === null ? null : (lesson.value?.words[wordIndex.value] ?? null),
@@ -520,6 +531,8 @@ export function useCourse() {
     start,
     visitSentence,
     showWord,
+    favoriteWords,
+    setFavorite,
     toggleAudio,
     speakText,
     practice,
