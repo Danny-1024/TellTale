@@ -21,6 +21,7 @@ export type {
   CourseSummary,
   CourseJob,
   CourseSnapshot,
+  MistakeReview,
   ReviewContent,
   StoryDraft,
   WordPracticeResult,
