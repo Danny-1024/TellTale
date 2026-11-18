@@ -136,6 +136,56 @@ test('real Workers course flow protects answers, persists state, grades attempts
     assert.equal(item.lesson.exercises.length, 3);
     assert(item.lesson.sentences.length >= 3 && item.lesson.sentences.length <= 5);
     titles.push(item.lesson.titleEn);
+    const revision = item.lesson.revision;
+    const approved = await catalog.command('approve', {
+      revision,
+      settings,
+      checks: Array(5).fill(true),
+    });
+    assert.deepEqual(approved.session.favoriteWordIds, []);
+    assert.deepEqual(approved.session.mistakes, []);
+    for (const sentence of item.lesson.sentences)
+      await catalog.command('event', { kind: 'sentence', targetId: sentence.id });
+    const wordId = item.lesson.words[0].id;
+    await catalog.command('event', { kind: 'word', targetId: wordId });
+    await catalog.command('event', { kind: 'favorite', targetId: wordId });
+    for (const exercise of item.lesson.exercises) {
+      // 每类题都经过真实错误、回顾和原题完成，配对逐项核对。
+      for (const leftId of exercise.type === 'match'
+        ? exercise.left.map((left) => left.id)
+        : [null]) {
+        const correct = leftId ? item.answers[exercise.id][leftId] : item.answers[exercise.id];
+        const options = leftId ? exercise.right : exercise.options;
+        const base = { revision, exerciseId: exercise.id, leftId, skip: false };
+        assert.equal(
+          (
+            await catalog.command('answer', {
+              ...base,
+              optionId: options.find((o) => o.id !== correct).id,
+            })
+          ).attempt.result,
+          'incorrect',
+        );
+        const result = await catalog.command('answer', {
+          ...base,
+          optionId: correct,
+          review: true,
+        });
+        assert.equal(
+          result.mistakes.find((entry) => entry.targetId === (leftId ?? exercise.id)).lastResult,
+          'correct',
+        );
+        await catalog.command('answer', { ...base, optionId: correct });
+      }
+    }
+    const finished = await catalog.command('finish', { reason: 'completed' });
+    const { summary } = await catalog.request('course/report');
+    assert.deepEqual(finished.session.favoriteWordIds, [wordId]);
+    assert.equal(summary.sentences, item.lesson.sentences.length);
+    assert.equal(summary.attempts.length, 2 * summary.completed);
+    assert.equal(summary.wordResults.length, 5);
+    assert.equal(finished.session.mistakes.length, summary.completed);
+    await catalog.request('course/unlock', {});
   }
   assert.equal(new Set(titles).size, sampleIds.length);
   assert.equal(
@@ -143,6 +193,7 @@ test('real Workers course flow protects answers, persists state, grades attempts
     'INPUT_INVALID',
   );
   await catalog.request('course/close', {});
+  await catalog.request('course/report', undefined, 401);
   const sampleOperation = crypto.randomUUID();
   await adult.command('sample', { operationId: sampleOperation });
   const review = await adult.request('course/review');
