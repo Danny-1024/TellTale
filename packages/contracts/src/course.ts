@@ -108,6 +108,7 @@ export interface CourseJob {
 export interface CourseSnapshot {
   id: string;
   favoriteWordIds: string[];
+  mistakes: MistakeReview[];
   mode: 'adult' | 'child';
   phase: 'prepare' | 'review' | 'learning' | 'finished';
   kind: 'sample' | 'class';
@@ -116,6 +117,13 @@ export interface CourseSnapshot {
   job: CourseJob | null;
   summary: CourseSummary | null;
   expiresAt: number;
+}
+
+export interface MistakeReview {
+  exerciseId: string;
+  targetId: string;
+  reviews: number;
+  lastResult: 'incorrect' | 'correct' | null;
 }
 
 export interface ReviewContent {

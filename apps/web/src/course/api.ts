@@ -4,6 +4,7 @@ import type {
   StoryDraft,
   CourseAttempt,
   PracticeReport,
+  MistakeReview,
 } from '@telltale/contracts';
 
 export class ApiError extends Error {
@@ -80,4 +81,4 @@ export async function command<T = CourseResult>(
 export const recordEvent = (kind: string, targetId: string) =>
   command<{ recorded?: boolean; hint?: string }>('event', { kind, targetId });
 export const submitAnswer = (data: Record<string, unknown>) =>
-  command<{ attempt: CourseAttempt; message: string }>('answer', data);
+  command<{ attempt: CourseAttempt; message: string; mistakes: MistakeReview[] }>('answer', data);

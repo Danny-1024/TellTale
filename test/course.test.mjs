@@ -226,6 +226,35 @@ test('real Workers course flow protects answers, persists state, grades attempts
     skip: false,
   };
   const wrong = await adult.command('answer', wrongData);
+  assert.deepEqual(wrong.mistakes, [
+    { exerciseId: choice.id, targetId: choice.id, reviews: 0, lastResult: null },
+  ]);
+  const replay = { ...wrongData, operationId: crypto.randomUUID(), review: true };
+  const reviewWrong = await adult.command('answer', replay);
+  assert.equal(reviewWrong.mistakes[0].lastResult, 'incorrect');
+  assert.equal((await adult.command('answer', replay)).mistakes[0].reviews, 1);
+  const reviewed = await adult.command('answer', {
+    ...replay,
+    operationId: crypto.randomUUID(),
+    optionId: review.answers[choice.id],
+  });
+  assert.deepEqual(reviewed.mistakes[0], {
+    exerciseId: choice.id,
+    targetId: choice.id,
+    reviews: 2,
+    lastResult: 'correct',
+  });
+  await adult.command('answer', { ...replay, operationId: crypto.randomUUID() }, 409);
+  await adult.command(
+    'answer',
+    {
+      ...replay,
+      operationId: crypto.randomUUID(),
+      exerciseId: cloze.id,
+      optionId: cloze.options[0].id,
+    },
+    409,
+  );
   assert.equal(wrong.attempt.result, 'incorrect');
   assert.equal((await adult.command('answer', wrongData)).attempt.id, wrong.attempt.id);
   await adult.command('answer', { ...wrongData, skip: true }, 409);
@@ -276,6 +305,7 @@ test('real Workers course flow protects answers, persists state, grades attempts
     [5, 1, 3, 1, 5],
   );
   assert(finished.session.summary.suggestion.includes('休息'));
+  assert.deepEqual(finished.session.mistakes, reviewed.mistakes);
   await adult.command(
     'answer',
     { revision: 1, exerciseId: cloze.id, leftId: null, optionId: null, skip: true },

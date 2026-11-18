@@ -311,6 +311,7 @@ export function useCourse() {
         skip,
       });
       lastAttempt.value = result.attempt;
+      session.value!.mistakes = result.mistakes;
       feedback.value = result.message;
       if (result.attempt.result !== 'incorrect')
         resolved.value[result.attempt.targetId] = result.attempt.result;
@@ -325,6 +326,20 @@ export function useCourse() {
     selected.value = null;
     feedback.value = '';
     lastAttempt.value = null;
+  }
+  async function reviewMistake(exerciseId: string, leftId: string | null, optionId: string) {
+    await act(async () => {
+      const result = await api.submitAnswer({
+        revision: lesson.value!.revision,
+        exerciseId,
+        leftId,
+        optionId,
+        skip: false,
+        review: true,
+      });
+      // 回顾状态只随服务端已接收的作答更新，不推进普通练习。
+      session.value!.mistakes = result.mistakes;
+    });
   }
   async function showHint() {
     await act(async () => {
@@ -538,6 +553,7 @@ export function useCourse() {
     practice,
     answer,
     retry,
+    reviewMistake,
     showHint,
     adultHelp,
     rest,

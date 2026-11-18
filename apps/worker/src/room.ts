@@ -5,6 +5,7 @@ import type {
   CourseSnapshot,
   CourseAttempt,
   CourseSummary,
+  MistakeReview,
   ReviewContent,
 } from '@telltale/contracts';
 import {
@@ -44,6 +45,7 @@ interface RoomState {
   expiresAt: number;
   leaseUntil: number;
   attempts: CourseAttempt[];
+  reviewAttempts?: CourseAttempt[];
   events: { kind: string; targetId: string }[];
   seen: Record<string, { hash: string; value: unknown }>;
   generationCount: number;
@@ -64,7 +66,30 @@ const answerSchema = z.strictObject({
   leftId: uuid.nullable(),
   optionId: uuid.nullable(),
   skip: z.boolean(),
+  review: z.boolean().default(false),
 });
+
+function mistakeReviews(state: RoomState): MistakeReview[] {
+  // 配对题按左侧词语分别回顾，普通练习的错误与回顾提交分别保留。
+  const mistakes = new Map<string, MistakeReview>();
+  for (const attempt of state.attempts) {
+    if (attempt.result === 'incorrect' && !mistakes.has(attempt.targetId))
+      mistakes.set(attempt.targetId, {
+        exerciseId: attempt.exerciseId,
+        targetId: attempt.targetId,
+        reviews: 0,
+        lastResult: null,
+      });
+  }
+  for (const attempt of state.reviewAttempts ?? []) {
+    const item = mistakes.get(attempt.targetId);
+    if (item && attempt.result !== 'skipped') {
+      item.reviews++;
+      item.lastResult = attempt.result;
+    }
+  }
+  return [...mistakes.values()];
+}
 
 export class CourseRoom extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -90,6 +115,7 @@ export class CourseRoom extends DurableObject<Env> {
       state.mode === 'adult' || Boolean(runtime && equalToken(runtime, state.runtime));
     return {
       id: state.id,
+      mistakes: canRead ? mistakeReviews(state) : [],
       // 收藏使用当前课堂的词卡事件，旧课堂自然得到空列表。
       favoriteWordIds: canRead
         ? state.events.filter((event) => event.kind === 'favorite').map((event) => event.targetId)
@@ -302,6 +328,7 @@ export class CourseRoom extends DurableObject<Env> {
         '请先结束当前处理。',
       );
       state.content = sampleContent(data.sampleId);
+      state.reviewAttempts = [];
       state.raw = null;
       state.source = '';
       state.phase = 'review';
@@ -376,6 +403,7 @@ export class CourseRoom extends DurableObject<Env> {
         '本课已达到10次生成上限。',
       );
       state.generationCount += 1;
+      state.reviewAttempts = [];
       state.source = storyInput.source;
       state.raw = null;
       state.content = null;
@@ -569,6 +597,22 @@ export class CourseRoom extends DurableObject<Env> {
       const answer = state.content!.answers[exercise.id]!;
       const correctId = typeof answer === 'string' ? answer : answer[targetId];
       const prior = state.attempts.filter((a) => a.targetId === targetId);
+      if (data.review) {
+        requireCondition(
+          !data.skip && prior.some((attempt) => attempt.result === 'incorrect'),
+          409,
+          'REVIEW_UNAVAILABLE',
+          '只能重新练习本课实际答错的项目。',
+        );
+        requireCondition(
+          !state.reviewAttempts?.some(
+            (attempt) => attempt.targetId === targetId && attempt.result === 'correct',
+          ),
+          409,
+          'REVIEW_COMPLETE',
+          '这一项已经回顾完成。',
+        );
+      }
       const support = state.events
         .filter(
           (event) =>
@@ -592,9 +636,11 @@ export class CourseRoom extends DurableObject<Env> {
         createdAt: new Date().toISOString(),
         support,
       };
-      state.attempts.push(attempt);
+      if (data.review) (state.reviewAttempts ??= []).push(attempt);
+      else state.attempts.push(attempt);
       value = {
         attempt,
+        mistakes: mistakeReviews(state),
         message:
           attempt.result === 'correct'
             ? '配合得很好，继续下一步吧。'

@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { adjacentSentence, REVIEW_TABS } from './experience';
 import { useCourse } from './useCourse';
+import MistakeReviewList from './MistakeReviewList.vue';
 import { SAMPLE_CATALOG } from './sampleCatalog';
 import type { StoryExercise } from '@telltale/contracts';
 import { wordResultLabels } from '@telltale/contracts';
@@ -70,6 +71,7 @@ const {
   practice,
   answer,
   retry,
+  reviewMistake,
   showHint,
   adultHelp,
   rest,
@@ -958,6 +960,13 @@ function matchAnswer(item: StoryExercise, id: string) {
             </button>
           </div>
         </div>
+        <MistakeReviewList
+          :exercises="lesson!.exercises"
+          :mistakes="session?.mistakes ?? []"
+          interactive
+          :busy="busy"
+          @answer="reviewMistake"
+        />
         <div class="practice-tools">
           <button
             v-if="replay?.audioUrl"
@@ -1003,6 +1012,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             </li>
           </ul>
         </details>
+        <MistakeReviewList :exercises="lesson!.exercises" :mistakes="session.mistakes ?? []" />
         <div class="summary-grid">
           <article>
             <strong>{{ session.summary.sentences }}</strong
