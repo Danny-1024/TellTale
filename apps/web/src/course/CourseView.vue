@@ -63,6 +63,8 @@ const {
   start,
   visitSentence,
   showWord,
+  favoriteWords,
+  setFavorite,
   toggleAudio,
   speakText,
   practice,
@@ -846,6 +848,15 @@ function matchAnswer(item: StoryExercise, id: string) {
               <h2 lang="en" tabindex="-1">{{ word.word }}</h2>
               <p>{{ word.meaning }}</p>
               <p lang="en" class="word-example">{{ wordExample }}</p>
+              <button
+                type="button"
+                class="button outline compact"
+                :aria-pressed="favoriteWords.some((item) => item.id === word!.id)"
+                :disabled="busy"
+                @click="setFavorite(word.id, !favoriteWords.some((item) => item.id === word!.id))"
+              >
+                收藏词卡
+              </button>
               <button type="button" class="button outline compact" @click="speakText(word.word)">
                 朗读这个词
               </button>
@@ -853,6 +864,20 @@ function matchAnswer(item: StoryExercise, id: string) {
             <button class="word-close" aria-label="关闭词卡" @click="showWord(null)">×</button>
           </section>
           <p v-else class="soft small">点击一个词语，看看它在故事里的意思。</p>
+          <details>
+            <summary>本课收藏（{{ favoriteWords.length }}）</summary>
+            <p v-if="!favoriteWords.length">打开一张词卡，选择“收藏词卡”即可加入这里。</p>
+            <ul v-else>
+              <li v-for="item in favoriteWords" :key="item.id">
+                <button
+                  class="button outline compact"
+                  @click="showWord(lesson!.words.findIndex((entry) => entry.id === item.id))"
+                >
+                  {{ item.word }} · {{ item.meaning }}
+                </button>
+              </li>
+            </ul>
+          </details>
         </div>
       </section>
 
@@ -969,6 +994,15 @@ function matchAnswer(item: StoryExercise, id: string) {
           }}
         </h1>
         <p class="lead">每一次阅读和尝试，都值得留下。</p>
+        <details>
+          <summary>本课收藏（{{ favoriteWords.length }}）</summary>
+          <p v-if="!favoriteWords.length">本课没有收藏词卡。</p>
+          <ul v-else>
+            <li v-for="item in favoriteWords" :key="item.id">
+              {{ item.word }} · {{ item.meaning }}
+            </li>
+          </ul>
+        </details>
         <div class="summary-grid">
           <article>
             <strong>{{ session.summary.sentences }}</strong

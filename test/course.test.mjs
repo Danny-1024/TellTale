@@ -194,6 +194,16 @@ test('real Workers course flow protects answers, persists state, grades attempts
   second.setRuntime(started.runtime);
   await second.command('event', { kind: 'rest', targetId: '' }, 403);
   const [choice, match, cloze] = started.session.lesson.exercises;
+  const wordId = started.session.lesson.words[0].id;
+  const favorite = { kind: 'favorite', targetId: wordId, operationId: crypto.randomUUID() };
+  await adult.command('event', favorite);
+  await adult.command('event', favorite);
+  assert.deepEqual((await adult.request('session')).session.favoriteWordIds, [wordId]);
+  await adult.command('event', { kind: 'unfavorite', targetId: wordId });
+  assert.deepEqual((await adult.request('session')).session.favoriteWordIds, []);
+  await adult.command('event', { kind: 'favorite', targetId: wordId });
+  assert.deepEqual((await second.request('session')).session.favoriteWordIds, []);
+  await adult.command('event', { kind: 'favorite', targetId: choice.id }, 400);
   await adult.command(
     'answer',
     {
@@ -272,6 +282,9 @@ test('real Workers course flow protects answers, persists state, grades attempts
     409,
   );
   await adult.request('course/report');
+  adult.setRuntime('');
+  assert.deepEqual((await adult.request('session')).session.favoriteWordIds, []);
+  assert.deepEqual((await adult.request('course/unlock', {})).session.favoriteWordIds, [wordId]);
   await adult.request('course/close', {});
   await adult.request('session', undefined, 401);
   await second.request('course/unlock', {});
