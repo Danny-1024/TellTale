@@ -203,10 +203,15 @@ export function useCourse() {
     else if (result.session.phase === 'finished') {
       move('summary');
       if (result.session.lesson) await loadPictures(result.session.lesson);
-    } else move('choose');
+    } else move(chosen.value === 'sample' ? 'choose' : 'input');
   }
   async function create() {
     await act(async () => {
+      // 本课已经建立时复用当前课堂，显示设置随成人批准保存。
+      if (session.value?.phase === 'prepare') {
+        move(chosen.value === 'sample' ? 'choose' : 'input');
+        return;
+      }
       await apply(await api.createSession(settings.value));
     });
   }
@@ -489,6 +494,7 @@ export function useCourse() {
   }
   const stopAudio = () => audio.stop();
   onMounted(async () => {
+    applyEntryQuery();
     try {
       await apply(await api.loadSession(), true);
     } catch (cause) {
@@ -496,7 +502,6 @@ export function useCourse() {
         error.value = cause instanceof Error ? cause.message : '无法读取课程。';
     } finally {
       loading.value = false;
-      applyEntryQuery();
       if (!session.value && (route.query.sample || route.query.mode === 'custom')) move('setup');
     }
     document.addEventListener('visibilitychange', background);

@@ -101,7 +101,7 @@ const title = computed(
     ({
       home: '让故事陪伴英语学习',
       setup: '先由成人准备',
-      choose: '今天想读什么？',
+      choose: '选择本课故事',
       input: '把故事讲给我们',
       waiting: session.value?.job?.kind === 'images' ? '正在准备配图' : '故事正在准备',
       review: '把关每一句话',
@@ -128,8 +128,24 @@ const sourceLabel = computed(() =>
     ? lesson.value.sentences.some((item) => item.imageUrl)
       ? '我的故事 · AI 生成文字和配图'
       : '我的故事 · AI 生成文字'
-    : '示例故事',
+    : '英语故事课',
 );
+const illustrationFailure = computed(() => {
+  const job = session.value?.job;
+  if (job?.kind !== 'images' || job.status !== 'failed') return null;
+  const target = job.failedImage
+    ? `第 ${job.failedImage.position} ${job.failedImage.kind === 'sentence' ? '句配图' : '张词卡图'}。`
+    : '';
+  const message =
+    job.error === 'IMAGE_FLAGGED' || job.error === 'ILLUSTRATION_TEXT_FLAGGED'
+      ? '安全检查未通过，请编辑相关教学内容后重试。'
+      : job.error?.includes('TIMEOUT') || job.error === 'IMAGE_DEADLINE'
+        ? '生成超时，请重试。'
+        : job.error === 'IMAGE_PROVIDER_NOT_CONFIGURED' || /^OPENAI_(401|403)/.test(job.error ?? '')
+          ? '配图服务暂不可用，请稍后再试。'
+          : '配图暂未完成，请重试。';
+  return target + message;
+});
 const dialogTitle = computed(
   () =>
     ({
@@ -286,51 +302,11 @@ function matchAnswer(item: StoryExercise, id: string) {
       }"
       :aria-busy="busy"
     >
-      <template v-if="stage === 'home'">
-        <section class="hero">
-          <div class="hero-copy">
-            <p class="eyebrow">小小的经历，也能成为故事</p>
-            <h1 data-title tabindex="-1">我的故事，<br /><span>我的英语。</span></h1>
-            <p class="lead">
-              讲一个自己的故事，读几句英语，<br class="desktop-break" />把新的词语带进今天的生活。
-            </p>
-            <button class="button primary large" @click="move('setup')">
-              准备今天的故事 <span aria-hidden="true">→</span>
-            </button>
-            <p class="soft small">由成人准备与审核，再交给孩子。无需注册。</p>
-          </div>
-          <div class="hero-art">
-            <span class="art-label">今天的小故事</span
-            ><img src="/samples/park-morning/images/01.svg" alt="小明和妈妈一起去公园" />
-            <div class="floating-word">
-              <img src="/spots/park.svg" alt="" /><span
-                ><strong lang="en">park</strong><small>公园</small></span
-              >
-            </div>
-            <div class="hero-caption"><span class="dot" />每次一点点，跟着自己的节奏</div>
-          </div>
-        </section>
-        <section class="steps-section" aria-label="学习步骤">
-          <article>
-            <span>01</span>
-            <h2>讲一个故事</h2>
-            <p>真实经历或想象，都可以。</p>
-          </article>
-          <article>
-            <span>02</span>
-            <h2>读一读，试一试</h2>
-            <p>一句英语，一张词卡，一道练习。</p>
-          </article>
-          <article>
-            <span>03</span>
-            <h2>留下一本故事书</h2>
-            <p>保存本课的故事，随时翻一翻。</p>
-          </article>
-        </section>
-        <footer class="home-footer">
-          <span>为 7–12 岁儿童设计 · 每课 3–5 句</span><span>可以求助，可以休息，也可以结束</span>
-        </footer>
-      </template>
+      <section v-if="stage === 'home'" class="paper-card">
+        <h1 data-title tabindex="-1">创建英语故事课</h1>
+        <p>由成人准备和审核本课内容，再交给孩子学习。</p>
+        <button class="button primary" @click="move('setup')">创建课程</button>
+      </section>
 
       <section v-else-if="stage === 'setup'" class="paper-card">
         <p class="eyebrow">成人准备 · 1 / 2</p>
@@ -344,7 +320,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             ><label class="check"
               ><input v-model="settings.reduceMotion" type="checkbox" />减少页面动效</label
             ><label
-              >示例音量<input
+              >朗读音量<input
                 v-model.number="settings.volume"
                 type="range"
                 min="0"
@@ -356,7 +332,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             本课最多保留4小时，连续15分钟无活动后结束。未提交的选择只保留在当前页面；关闭或刷新页面后需要成人重新进入。
           </p>
           <button class="button primary" :disabled="busy">
-            {{ busy ? '正在准备…' : '继续选择故事' }}
+            {{ busy ? '正在准备…' : '继续准备故事' }}
           </button>
         </form>
       </section>
@@ -385,14 +361,14 @@ function matchAnswer(item: StoryExercise, id: string) {
             @click="chosen = 'sample'"
           >
             <img src="/spots/park.svg" alt="公园" />
-            <h2>公园的早晨</h2>
-            <p>示例故事 · 配有图片与音频</p>
+            <h2>课程库</h2>
+            <p>选择已编排的故事课程</p>
             <span class="selection-mark">{{
               chosen === 'sample' ? '✓ 已选择' : '选择这个故事'
             }}</span>
           </button>
         </div>
-        <div v-if="chosen === 'sample'" class="sample-grid" role="listbox" aria-label="示例课程">
+        <div v-if="chosen === 'sample'" class="sample-grid" role="group" aria-label="课程库">
           <button
             v-for="item in SAMPLE_CATALOG"
             :key="item.id"
@@ -472,7 +448,8 @@ function matchAnswer(item: StoryExercise, id: string) {
           >
         </div>
         <div class="action-row">
-          <button class="button outline" :disabled="busy" @click="move('choose')">返回选择</button
+          <button class="button outline" :disabled="busy" @click="move('setup')">
+            返回课程设置</button
           ><button
             class="button primary"
             :disabled="busy || !confirmed || Boolean(inputIssue)"
@@ -490,7 +467,19 @@ function matchAnswer(item: StoryExercise, id: string) {
         <p role="status" aria-live="polite" aria-atomic="true">
           {{ session?.job?.stage || '正在准备故事。' }}
         </p>
-        <p class="soft">生成完成后，请成人检查每句话和每道练习。</p>
+        <template v-if="session?.job?.imageProgress">
+          <progress
+            class="image-progress"
+            aria-label="配图检查进度"
+            :value="session.job.imageProgress.checked"
+            :max="session.job.imageProgress.total"
+          />
+          <p class="soft" aria-live="polite">
+            已检查 {{ session.job.imageProgress.checked }} /
+            {{ session.job.imageProgress.total }} 张配图
+          </p>
+        </template>
+        <p v-else class="soft">生成完成后，请成人检查每句话和每道练习。</p>
         <button class="button outline" :disabled="busy" @click="cancelGeneration">取消生成</button>
       </section>
       <section v-else-if="stage === 'generation-error'" class="paper-card">
@@ -506,11 +495,9 @@ function matchAnswer(item: StoryExercise, id: string) {
       <section v-else-if="stage === 'review' && review" class="review-page">
         <div class="review-heading">
           <div>
-            <p class="eyebrow">
-              成人审核 · {{ review.lesson.source === 'custom' ? 'AI 生成文字' : '示例故事' }}
-            </p>
+            <p class="eyebrow">成人审核</p>
             <h1 data-title tabindex="-1">{{ title }}</h1>
-            <p>请检查原意、英文、词卡与答案，确认后再交给孩子。</p>
+            <p>请核对英中句子、配图、词卡和练习答案，确认后再开课。</p>
           </div>
           <button
             v-if="review.raw && !editing"
@@ -645,13 +632,13 @@ function matchAnswer(item: StoryExercise, id: string) {
             role="tabpanel"
             aria-labelledby="review-tab-story"
           >
-            <p class="eyebrow">儿童预览</p>
             <h2>{{ review.lesson.title }}</h2>
             <p lang="en">{{ review.lesson.titleEn }}</p>
             <article
               v-for="(line, index) in review.lesson.sentences"
               :key="line.id"
               class="review-sentence"
+              :class="{ 'with-image': imageSource(line.imageUrl) }"
             >
               <span>{{ String(index + 1).padStart(2, '0') }}</span>
               <div>
@@ -674,13 +661,16 @@ function matchAnswer(item: StoryExercise, id: string) {
           >
             <h2>5个故事词语</h2>
             <p v-if="!review.lesson.words.length">这一课还没有词卡。</p>
-            <div v-for="item in review.lesson.words" :key="item.id" class="review-sentence">
-              <strong lang="en">{{ item.word }}</strong> · {{ item.meaning }}
-              <img
-                v-if="imageSource(item.imageUrl)"
-                :src="imageSource(item.imageUrl)"
-                :alt="item.meaning"
-              />
+            <div class="review-words">
+              <article v-for="item in review.lesson.words" :key="item.id">
+                <img
+                  v-if="imageSource(item.imageUrl)"
+                  :src="imageSource(item.imageUrl)"
+                  :alt="item.meaning"
+                />
+                <h3 lang="en">{{ item.word }}</h3>
+                <p>{{ item.meaning }}</p>
+              </article>
             </div>
           </div>
           <div
@@ -718,7 +708,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             aria-labelledby="review-tab-focus"
           >
             <legend>选择本课重点词（2–3个）</legend>
-            <p v-if="!review.raw">示例课程使用已准备好的练习。自编故事可以在这里更换重点词。</p>
+            <p v-if="!review.raw">本课重点词已经编排在练习中。</p>
             <template v-else>
               <p>练习会覆盖所选词语，故事原文保持不变。更新练习后请重新检查答案。</p>
               <label v-for="item in review.lesson.words" :key="item.id" class="check">
@@ -753,11 +743,8 @@ function matchAnswer(item: StoryExercise, id: string) {
                 请先删去真实姓名、学校、住址和联系方式。当前英语句子、词卡及教学文字将发给
                 OpenAI，用于配图和安全检查。
               </p>
-              <p
-                v-if="session?.job?.kind === 'images' && session.job.status === 'failed'"
-                role="alert"
-              >
-                配图未完成。请检查内容后重试。{{ session.job.error }}
+              <p v-if="illustrationFailure" role="alert">
+                {{ illustrationFailure }}
               </p>
               <label class="check">
                 <input
@@ -770,7 +757,7 @@ function matchAnswer(item: StoryExercise, id: string) {
                 :disabled="busy || !consentToIllustrate || focusChanged"
                 @click="illustrate"
               >
-                生成并检查配图
+                {{ illustrationFailure ? '重试配图' : '生成并检查配图' }}
               </button>
             </template>
             <p v-else-if="review.illustrations === 'unavailable'">
@@ -789,7 +776,7 @@ function matchAnswer(item: StoryExercise, id: string) {
               ><input v-model="checks[index]" type="checkbox" />{{ label }}</label
             >
             <div class="action-row">
-              <button class="button outline" :disabled="busy" @click="move('choose')">
+              <button class="button outline" :disabled="busy" @click="move('input')">
                 重新准备故事</button
               ><button
                 class="button primary"
@@ -1247,7 +1234,7 @@ function matchAnswer(item: StoryExercise, id: string) {
       </section>
       <section v-else class="paper-card">
         <h1 data-title tabindex="-1">这一页还没有内容</h1>
-        <p>当前步骤还没有可显示的课程内容。可以返回准备，或回到首页选择示例。</p>
+        <p>当前步骤还没有可显示的课程内容。请返回课程设置。</p>
         <div class="action-row">
           <button class="button outline" type="button" @click="move('setup')">返回准备</button>
           <RouterLink class="button primary" to="/">回到首页</RouterLink>
@@ -1365,13 +1352,13 @@ function matchAnswer(item: StoryExercise, id: string) {
       >
       <template v-else-if="dialog === 'guide'">
         <ol>
-          <li>成人选择自编故事或示例。</li>
+          <li>成人创建课程并准备故事。</li>
           <li>输入中文故事，确认发送范围后生成。</li>
           <li>成人检查全部文字、词卡和练习，再交给孩子。</li>
           <li>逐句阅读，查看词卡，完成三类练习。随时可以求助、休息或结束。</li>
           <li>保存故事书和逐词练习报告，并结束、清理课堂。</li>
         </ol>
-        <p>自编故事可在成人确认后生成配图，示例配有图片与音频。刷新页面后未提交的选择无法恢复。</p>
+        <p>成人确认后生成配图。刷新页面后，未提交的选择无法恢复。</p>
         <button class="button primary" @click="dialog = null">知道了</button></template
       >
       <template v-else-if="dialog === 'privacy'">

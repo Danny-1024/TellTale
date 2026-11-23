@@ -5,6 +5,7 @@ import { ProviderError } from './provider';
 interface IllustrationTarget {
   id: string;
   kind: 'sentence' | 'word';
+  position: number;
   description: string;
 }
 
@@ -15,10 +16,16 @@ export type CourseImage = Awaited<ReturnType<typeof generateIllustration>> & {
 
 export function pictureTargets(lesson: StoryLesson): IllustrationTarget[] {
   return [
-    ...lesson.sentences.map(({ id, en }) => ({ id, kind: 'sentence' as const, description: en })),
-    ...lesson.words.map(({ id, word, meaning, sentenceId }) => ({
+    ...lesson.sentences.map(({ id, en }, index) => ({
+      id,
+      kind: 'sentence' as const,
+      position: index + 1,
+      description: en,
+    })),
+    ...lesson.words.map(({ id, word, meaning, sentenceId }, index) => ({
       id,
       kind: 'word' as const,
+      position: index + 1,
       description: `${word} (${meaning}) in the context of ${lesson.sentences.find((line) => line.id === sentenceId)!.en}`,
     })),
   ];

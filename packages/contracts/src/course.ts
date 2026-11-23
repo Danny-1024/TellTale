@@ -95,6 +95,7 @@ export interface CourseSummary {
 export interface PracticeReport {
   lesson: StoryLesson;
   summary: CourseSummary;
+  mistakes?: MistakeReview[];
 }
 
 export interface CourseJob {
@@ -104,8 +105,11 @@ export interface CourseJob {
   stage: string;
   error: string | null;
   attempts: number;
+  imageProgress?: { checked: number; total: number };
+  failedImage?: { kind: 'sentence' | 'word'; position: number };
 }
 
+export const TELLTALE_VERSION = '1.3.0';
 export const COURSE_MEDIA_PATH = '/api/v1/course/media/';
 export type IllustrationStatus = 'disabled' | 'required' | 'ready' | 'unavailable';
 

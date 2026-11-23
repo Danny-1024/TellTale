@@ -124,7 +124,9 @@ export async function renderBook(
     en: wrap(s.en, enFont),
     zh: wrap(s.zh, zhFont),
   }));
-  const headerHeight = 130 + titleLines.length * 64 + englishTitle.length * 52;
+  const coverImage = images.find((item) => item !== null);
+  const coverImageHeight = coverImage ? 340 : 0;
+  const headerHeight = 190 + titleLines.length * 64 + englishTitle.length * 52 + coverImageHeight;
   canvas.height =
     headerHeight +
     rows.reduce(
@@ -142,8 +144,13 @@ export async function renderBook(
   context.fillStyle = '#fefbf4';
   context.fillRect(0, 0, 1080, canvas.height);
   context.textBaseline = 'top';
-  context.fillStyle = '#1a2b4a';
-  let y = 60;
+  // 封面和正文使用同一审核版本的图片，并在封面标明生成来源。
+  context.fillStyle = '#123d35';
+  context.fillRect(0, 0, canvas.width, headerHeight - 26);
+  context.fillStyle = '#f4f7d5';
+  context.font = '700 24px Nunito, sans-serif';
+  context.fillText('TellTale English  ·  BILINGUAL STORYBOOK', 80, 54);
+  let y = 105;
   context.font = '800 48px Nunito, sans-serif';
   for (const line of titleLines) {
     context.fillText(line, 80, y);
@@ -160,11 +167,23 @@ export async function renderBook(
       ? images.some(Boolean)
         ? 'AI 生成文字和配图 · 成人已审核'
         : 'AI 生成文字 · 成人已审核'
-      : '示例故事 · TellTale English',
+      : '英语故事课 · TellTale English',
     80,
     y + 12,
   );
+  if (coverImage) {
+    const scale = Math.min(920 / coverImage.naturalWidth, 295 / coverImage.naturalHeight);
+    const width = coverImage.naturalWidth * scale;
+    context.drawImage(
+      coverImage,
+      (1080 - width) / 2,
+      y + 52,
+      width,
+      coverImage.naturalHeight * scale,
+    );
+  }
   y = headerHeight;
+  context.fillStyle = '#1a2b4a';
   rows.forEach((row, i) => {
     if (row.image) {
       const h = Math.round((920 * row.image.naturalHeight) / row.image.naturalWidth);
@@ -211,6 +230,13 @@ export async function renderPracticeReport(report: PracticeReport): Promise<Blob
         timeStyle: 'short',
       }).format(new Date(report.summary.finishedAt))
     : '原课堂未记录结束时间';
+  const reviewItems = (report.mistakes ?? []).flatMap((mistake) => {
+    if (mistake.lastResult === 'correct') return [];
+    const exercise = report.lesson.exercises.find((item) => item.id === mistake.exerciseId);
+    if (!exercise) return [];
+    const target = exercise.left.find((item) => item.id === mistake.targetId)?.text;
+    return [target ? `${exercise.prompt} · ${target}` : exercise.prompt];
+  });
   const paragraphs = [
     'TellTale English · 本课练习报告',
     report.lesson.title,
@@ -234,10 +260,12 @@ export async function renderPracticeReport(report: PracticeReport): Promise<Blob
           ]
         : []),
     ]),
+    '需要回顾的题目',
+    ...(reviewItems.length ? reviewItems : ['本课没有待回顾的错题。']),
     '给陪伴者的一句话',
     report.summary.suggestion,
     '本报告仅记录本课匿名练习情况；结果不代表长期掌握程度。全部尝试可在本课结果页查看。',
-    `${report.lesson.source === 'custom' ? 'AI生成文字 · 成人已审核' : '示例故事'} · 课堂结束前保存，下载文件由成人保管。`,
+    `${report.lesson.source === 'custom' ? 'AI生成文字 · 成人已审核' : '英语故事课'} · 课堂结束前保存，下载文件由成人保管。`,
   ];
   context.font = '700 32px Nunito, "PingFang SC", sans-serif';
   // 按真实字形宽度换行，长词和中文都保留完整文字。

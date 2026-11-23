@@ -1,8 +1,5 @@
 <script setup lang="ts">
-import { samplesByTheme } from '../course/sampleCatalog';
 import StatusBanner from './StatusBanner.vue';
-
-const groups = samplesByTheme();
 </script>
 
 <template>
@@ -14,53 +11,34 @@ const groups = samplesByTheme();
         <span>English</span></RouterLink
       >
       <nav class="top-links" aria-label="页面">
-        <RouterLink to="/course">开始课程</RouterLink>
         <RouterLink to="/guide">使用指南</RouterLink>
         <RouterLink to="/privacy">隐私说明</RouterLink>
         <RouterLink to="/about">关于</RouterLink>
       </nav>
     </header>
     <StatusBanner />
-    <main id="page-main" class="content">
-      <section class="hero">
+    <main id="page-main" class="content landing">
+      <section class="landing-intro">
         <div class="hero-copy">
-          <p class="eyebrow">课程体验</p>
-          <h1 data-title tabindex="-1">选一个故事，马上开始</h1>
-          <p class="lead">六个示例可以直接学习。想讲自己的经历时，由成人输入中文并检查生成结果。</p>
-          <RouterLink class="button primary large" to="/course?mode=custom"
-            >写自己的故事</RouterLink
-          >
-          <p class="soft small">无需注册。本课结束后仍按临时课堂清理。</p>
+          <h1>把故事带进<br class="desktop-break" />英语课堂</h1>
+          <p class="lead">
+            成人准备和审核，孩子读故事、学词语、做练习。课后可以保存双语绘本和练习报告。
+          </p>
+          <RouterLink class="button primary large" to="/course?mode=custom">创建课程</RouterLink>
+          <p class="soft small">为 7–12 岁儿童设计 · 无需注册</p>
+        </div>
+        <div class="landing-cover" aria-hidden="true">
+          <div class="cover-leaf">
+            <span class="cover-name" lang="en">TellTale<br />English</span>
+            <span class="cover-caption">双语故事绘本</span>
+          </div>
         </div>
       </section>
-      <section v-if="groups.length === 0" class="paper-card">
-        <h2>暂时没有示例</h2>
-        <p>可以先从自己的故事开始。</p>
-      </section>
-      <section
-        v-for="group in groups"
-        :key="group.theme"
-        class="sample-theme"
-        :aria-label="group.theme"
-      >
-        <h2>{{ group.theme }}</h2>
-        <div class="sample-grid">
-          <article v-for="item in group.items" :key="item.id" class="paper-card sample-card">
-            <p class="eyebrow">{{ item.difficultyLabel }}</p>
-            <h3>{{ item.title }}</h3>
-            <p lang="en">{{ item.titleEn }}</p>
-            <p class="soft" lang="en">{{ item.preview }}</p>
-            <RouterLink class="button primary" :to="`/course?sample=${item.id}`"
-              >开始学习</RouterLink
-            >
-          </article>
-        </div>
-      </section>
+      <ol class="landing-flow" aria-label="课堂流程">
+        <li><strong>准备故事</strong><span>选择难度，检查生成的文字和配图。</span></li>
+        <li><strong>陪伴学习</strong><span>逐句听读，查看词卡，完成本课练习。</span></li>
+        <li><strong>保存成果</strong><span>下载本课绘本与练习报告。</span></li>
+      </ol>
     </main>
-    <footer class="home-footer">
-      <RouterLink to="/guide">课堂准备</RouterLink>
-      <RouterLink to="/privacy">隐私说明</RouterLink>
-      <p>示例故事保存在应用内，不会为此调用故事生成服务。</p>
-    </footer>
   </div>
 </template>

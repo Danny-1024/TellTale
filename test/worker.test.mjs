@@ -5,6 +5,9 @@ import { mkdirSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import workspace from '../package.json' with { type: 'json' };
+import webPackage from '../apps/web/package.json' with { type: 'json' };
+import workerPackage from '../apps/worker/package.json' with { type: 'json' };
 
 test('Worker serves the Web application and health endpoint through workerd', async (t) => {
   const runtime = path.resolve('.work-dev/runtime');
@@ -59,6 +62,11 @@ test('Worker serves the Web application and health endpoint through workerd', as
   const head = await fetch(`${origin}/health/live`, { method: 'HEAD' });
   assert.equal(head.status, 200);
   assert.equal(await head.text(), '');
+  const capabilities = await fetch(`${origin}/api/v1/capabilities`);
+  assert.equal(capabilities.status, 200);
+  assert.equal((await capabilities.json()).version, workspace.version);
+  assert.equal(webPackage.version, workspace.version);
+  assert.equal(workerPackage.version, workspace.version);
   const post = await fetch(`${origin}/health/live`, { method: 'POST' });
   assert.equal(post.status, 405);
   assert.equal(post.headers.get('allow'), 'GET, HEAD');

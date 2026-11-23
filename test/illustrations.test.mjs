@@ -307,6 +307,9 @@ test('workerd isolates current lesson illustrations and enforces safety approval
   await other.command('illustrate', { revision: 4, confirmed: true });
   const blocked = await until(other.state, (state) => state.job.status === 'failed');
   assert.equal(blocked.job.error, 'IMAGE_FLAGGED');
+  assert.equal(blocked.job.imageProgress.total, 10);
+  assert.equal(blocked.job.failedImage.kind, 'sentence');
+  assert([1, 2].includes(blocked.job.failedImage.position));
   assert.equal(
     (await other.command('approve', approval(4), 409)).error.code,
     'ILLUSTRATIONS_NOT_READY',

@@ -193,6 +193,8 @@ export class CourseRoom extends DurableObject<IllustrationEnvironment> {
             stage: state.job.stage,
             error: state.job.error,
             attempts: state.job.attempts,
+            ...(state.job.imageProgress ? { imageProgress: state.job.imageProgress } : {}),
+            ...(state.job.failedImage ? { failedImage: state.job.failedImage } : {}),
           }
         : null,
       // 已存在的1.0课堂也从原始事件补充逐词投影，不推测缺失的结束时间。
@@ -341,6 +343,7 @@ export class CourseRoom extends DurableObject<IllustrationEnvironment> {
       return Response.json({
         lesson: state.content.lesson,
         summary: this.summarize(state, state.summary.reason, state.summary.finishedAt ?? null),
+        mistakes: mistakeReviews(state),
       });
     }
     if (action === 'unlock') {
@@ -621,6 +624,7 @@ export class CourseRoom extends DurableObject<IllustrationEnvironment> {
         revision: data.revision,
         status: 'queued',
         stage: '等待生成配图',
+        imageProgress: { checked: 0, total: lesson.sentences.length + lesson.words.length },
         error: null,
         attempts: 0,
         deadline: Date.now() + IMAGE_DEADLINE,
@@ -955,6 +959,9 @@ export class CourseRoom extends DurableObject<IllustrationEnvironment> {
     const controller = new AbortController();
     this.imageRequest = { id: job.id, controller };
     const { signal } = controller;
+    const startedAt = Date.now();
+    let requests = 0;
+    let failedImage: typeof job.failedImage;
     try {
       if (!apiKey) throw new ProviderError('IMAGE_PROVIDER_NOT_CONFIGURED', false);
       // 成人确认后审核当前教学文字，保留独立的文本安全结果。原始经历不进入 OpenAI 请求。
@@ -968,16 +975,29 @@ export class CourseRoom extends DurableObject<IllustrationEnvironment> {
       const targets = pictureTargets(lesson);
       const images: CourseImage[] = [];
       const worker = async () => {
-        try {
-          for (let target = targets.shift(); target && !signal.aborted; target = targets.shift())
+        for (let target = targets.shift(); target && !signal.aborted; target = targets.shift()) {
+          try {
             images.push(
               await makeCourseImage(apiKey, target, job.deadline, signal, (run) =>
-                this.withImageSlot(job.deadline, signal, run),
+                this.withImageSlot(job.deadline, signal, () => {
+                  requests++;
+                  return run();
+                }),
               ),
             );
-        } catch (error) {
-          controller.abort(error);
-          throw error;
+            const latest = current();
+            if (!latest || signal.aborted) return;
+            // 重新读取课堂，保留并发心跳更新。只有通过审核的图片计入进度。
+            latest.job!.imageProgress = {
+              checked: images.length,
+              total: lesson.sentences.length + lesson.words.length,
+            };
+            this.save(latest);
+          } catch (error) {
+            if (!signal.aborted) failedImage = { kind: target.kind, position: target.position };
+            controller.abort(error);
+            throw error;
+          }
         }
       };
       await Promise.allSettled([worker(), worker()]);
@@ -1002,14 +1022,32 @@ export class CourseRoom extends DurableObject<IllustrationEnvironment> {
         this.images.store(latest.content!.lesson, job.id, images);
         this.save(latest);
       });
+      console.info(
+        JSON.stringify({
+          stage: 'illustration',
+          status: 'ready',
+          imageCount: images.length,
+          requests,
+          durationMs: Date.now() - startedAt,
+        }),
+      );
     } catch (error) {
       const latest = current();
       if (!latest) return;
       if (!(error instanceof ProviderError)) throw error;
       latest.job!.status = 'failed';
       latest.job!.error = error.code;
+      if (failedImage) latest.job!.failedImage = failedImage;
       latest.job!.stage = '配图未完成';
-      console.error(JSON.stringify({ stage: 'illustration', errorCode: error.code }));
+      console.error(
+        JSON.stringify({
+          stage: 'illustration',
+          status: 'failed',
+          errorCode: error.code,
+          requests,
+          durationMs: Date.now() - startedAt,
+        }),
+      );
       this.save(latest);
     } finally {
       if (this.imageRequest?.id === job.id) this.imageRequest = null;

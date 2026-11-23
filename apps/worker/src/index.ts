@@ -1,5 +1,5 @@
 import type { LiveResponse } from '@telltale/contracts';
-import { COURSE_MEDIA_PATH } from '@telltale/contracts';
+import { COURSE_MEDIA_PATH, TELLTALE_VERSION } from '@telltale/contracts';
 import { parseCookie, stringifySetCookie } from 'cookie';
 import { z } from 'zod';
 import {
@@ -50,7 +50,7 @@ export default {
             generation: Boolean(env.DEEPSEEK_API_KEY),
             illustrations: Boolean(env.OPENAI_API_KEY),
             model: 'deepseek-flash',
-            version: '1.2.0',
+            version: TELLTALE_VERSION,
           },
           { headers },
         );

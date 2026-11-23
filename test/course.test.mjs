@@ -362,7 +362,7 @@ test('real Workers course flow protects answers, persists state, grades attempts
     { revision: 1, exerciseId: cloze.id, leftId: null, optionId: null, skip: true },
     409,
   );
-  await adult.request('course/report');
+  assert.deepEqual((await adult.request('course/report')).mistakes, finished.session.mistakes);
   adult.setRuntime('');
   assert.deepEqual((await adult.request('session')).session.favoriteWordIds, []);
   assert.deepEqual((await adult.request('course/unlock', {})).session.favoriteWordIds, [wordId]);
