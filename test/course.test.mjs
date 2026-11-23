@@ -119,6 +119,7 @@ test('real Workers course flow protects answers, persists state, grades attempts
   await adult.request('session', { kind: 'class', settings }, 201);
   const catalog = client();
   await catalog.request('session', { kind: 'class', settings }, 201);
+  const classics = ['hare-tortoise', 'lion-mouse', 'crow-pitcher', 'fox-grapes'];
   const sampleIds = [
     'park-morning',
     'family-dinner',
@@ -126,6 +127,7 @@ test('real Workers course flow protects answers, persists state, grades attempts
     'small-pet',
     'after-rain',
     'happy-weekend',
+    ...classics,
   ];
   const titles = [];
   for (const sampleId of sampleIds) {
@@ -135,6 +137,15 @@ test('real Workers course flow protects answers, persists state, grades attempts
     assert.equal(item.lesson.words.length, 5);
     assert.equal(item.lesson.exercises.length, 3);
     assert(item.lesson.sentences.length >= 3 && item.lesson.sentences.length <= 5);
+    if (classics.includes(sampleId)) {
+      assert.equal(item.lesson.classicStoryId, sampleId);
+      assert.equal(item.lesson.sentences[0].imageUrl, `/stories/${sampleId}.jpg`);
+      const cover = await fetch(`${origin}${item.lesson.sentences[0].imageUrl}`);
+      assert.equal(cover.status, 200);
+      assert.equal(cover.headers.get('content-type'), 'image/jpeg');
+      assert((await cover.arrayBuffer()).byteLength > 0);
+      assert.equal(item.illustrations, 'disabled');
+    }
     titles.push(item.lesson.titleEn);
     const revision = item.lesson.revision;
     const approved = await catalog.command('approve', {
@@ -142,6 +153,10 @@ test('real Workers course flow protects answers, persists state, grades attempts
       settings,
       checks: Array(5).fill(true),
     });
+    if (classics.includes(sampleId)) {
+      assert.equal(approved.session.lesson.classicStoryId, sampleId);
+      assert.equal('answers' in approved.session.lesson, false);
+    }
     assert.deepEqual(approved.session.favoriteWordIds, []);
     assert.deepEqual(approved.session.mistakes, []);
     for (const sentence of item.lesson.sentences)

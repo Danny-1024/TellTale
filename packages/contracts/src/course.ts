@@ -1,3 +1,5 @@
+import type { ClassicStoryId } from './classic-stories.js';
+
 export interface StorySentence {
   id: string;
   en: string;
@@ -38,6 +40,7 @@ export interface StoryLesson {
   title: string;
   titleEn: string;
   source: 'sample' | 'custom';
+  classicStoryId?: ClassicStoryId;
   difficulty: 'L' | 'M' | 'H';
   sentences: StorySentence[];
   words: StoryWord[];
@@ -109,7 +112,7 @@ export interface CourseJob {
   failedImage?: { kind: 'sentence' | 'word'; position: number };
 }
 
-export const TELLTALE_VERSION = '1.3.0';
+export const TELLTALE_VERSION = '1.4.0';
 export const COURSE_MEDIA_PATH = '/api/v1/course/media/';
 export type IllustrationStatus = 'disabled' | 'required' | 'ready' | 'unavailable';
 

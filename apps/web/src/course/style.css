@@ -260,6 +260,54 @@ button {
 .landing-intro .lead {
   max-width: 29em;
 }
+.landing-actions,
+.story-credit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.classic-stories {
+  border-top: 1px solid var(--line);
+  padding: 26px 0 44px;
+  scroll-margin-top: 24px;
+}
+.classic-story-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  margin: 18px 0;
+  padding: 0;
+  gap: 16px;
+  list-style: none;
+}
+.classic-story-card {
+  display: grid;
+  align-content: start;
+  height: 100%;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fffdf4;
+  color: #17473b;
+  text-decoration: none;
+}
+.classic-story-card:hover {
+  border-color: #557562;
+}
+.classic-story-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #f2eddd;
+}
+.classic-story-card strong {
+  font-size: 21px;
+}
+.classic-story-card span {
+  font-size: 16px;
+}
 .landing-cover {
   padding: 18px 20px 18px 12px;
 }
@@ -649,6 +697,13 @@ legend {
   grid-column: 3;
   width: 100%;
   border-radius: 12px;
+}
+.review-sentence.with-image img.classic-artwork,
+.story-art > img.classic-artwork {
+  object-fit: contain;
+}
+.story-art > img.classic-artwork {
+  max-height: 380px;
 }
 .review-words {
   display: grid;

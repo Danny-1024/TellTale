@@ -5,7 +5,12 @@ import { useCourse } from './useCourse';
 import MistakeReviewList from './MistakeReviewList.vue';
 import { SAMPLE_CATALOG } from './sampleCatalog';
 import type { StoryExercise } from '@telltale/contracts';
-import { wordResultLabels } from '@telltale/contracts';
+import {
+  AESOP_ART_CREDIT,
+  CLASSIC_STORIES,
+  isClassicStoryId,
+  wordResultLabels,
+} from '@telltale/contracts';
 
 const {
   stage,
@@ -123,13 +128,20 @@ const replay = computed(() =>
 const wordExample = computed(
   () => lesson.value?.sentences.find((s) => s.id === word.value?.sentenceId)?.en,
 );
-const sourceLabel = computed(() =>
-  lesson.value?.source === 'custom'
-    ? lesson.value.sentences.some((item) => item.imageUrl)
-      ? '我的故事 · AI 生成文字和配图'
-      : '我的故事 · AI 生成文字'
-    : '英语故事课',
+const classicStory = computed(() => {
+  const id = (review.value?.lesson ?? lesson.value)?.classicStoryId;
+  return id ? CLASSIC_STORIES[id] : null;
+});
+const selectedClassic = computed(() =>
+  isClassicStoryId(sampleId.value) ? CLASSIC_STORIES[sampleId.value] : null,
 );
+const sourceLabel = computed(() => {
+  if (classicStory.value) return '经典故事 · 伊索寓言';
+  if (lesson.value?.source !== 'custom') return '英语故事课';
+  return lesson.value.sentences.some((item) => item.imageUrl)
+    ? '我的故事 · AI 生成文字和配图'
+    : '我的故事 · AI 生成文字';
+});
 const illustrationFailure = computed(() => {
   const job = session.value?.job;
   if (job?.kind !== 'images' || job.status !== 'failed') return null;
@@ -309,9 +321,10 @@ function matchAnswer(item: StoryExercise, id: string) {
       </section>
 
       <section v-else-if="stage === 'setup'" class="paper-card">
-        <p class="eyebrow">成人准备 · 1 / 2</p>
+        <p class="eyebrow">{{ selectedClassic ? '成人准备' : '成人准备 · 1 / 2' }}</p>
         <h1 data-title tabindex="-1">{{ title }}</h1>
-        <p>选择适合本课的学习支持，然后准备故事。</p>
+        <p v-if="selectedClassic">《{{ selectedClassic.title }}》 · 选择本课的学习支持。</p>
+        <p v-else>选择适合本课的学习支持，然后准备故事。</p>
         <form @submit.prevent="create">
           <fieldset class="settings">
             <legend>学习支持</legend>
@@ -332,7 +345,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             本课最多保留4小时，连续15分钟无活动后结束。未提交的选择只保留在当前页面；关闭或刷新页面后需要成人重新进入。
           </p>
           <button class="button primary" :disabled="busy">
-            {{ busy ? '正在准备…' : '继续准备故事' }}
+            {{ busy ? '正在准备…' : selectedClassic ? '审核这本故事' : '继续准备故事' }}
           </button>
         </form>
       </section>
@@ -634,6 +647,14 @@ function matchAnswer(item: StoryExercise, id: string) {
           >
             <h2>{{ review.lesson.title }}</h2>
             <p lang="en">{{ review.lesson.titleEn }}</p>
+            <p v-if="classicStory" class="soft small story-credit">
+              <a :href="classicStory.sourceUrl" target="_blank" rel="noopener noreferrer"
+                >查看原文</a
+              >
+              <a :href="classicStory.artworkUrl" target="_blank" rel="noopener noreferrer"
+                >插图 {{ AESOP_ART_CREDIT }}</a
+              >
+            </p>
             <article
               v-for="(line, index) in review.lesson.sentences"
               :key="line.id"
@@ -649,6 +670,7 @@ function matchAnswer(item: StoryExercise, id: string) {
                 v-if="imageSource(line.imageUrl)"
                 :src="imageSource(line.imageUrl)"
                 :alt="line.imageAlt ?? ''"
+                :class="{ 'classic-artwork': classicStory }"
               />
             </article>
           </div>
@@ -802,6 +824,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             v-if="imageSource(lesson.sentences[0]?.imageUrl)"
             :src="imageSource(lesson.sentences[0]?.imageUrl)"
             :alt="lesson.sentences[0]?.imageAlt ?? ''"
+            :class="{ 'classic-artwork': classicStory }"
           />
           <div v-else class="text-art" aria-hidden="true">
             <span aria-hidden="true">Aa</span>
@@ -829,6 +852,7 @@ function matchAnswer(item: StoryExercise, id: string) {
             v-if="imageSource(sentence.imageUrl)"
             :src="imageSource(sentence.imageUrl)"
             :alt="sentence.imageAlt ?? ''"
+            :class="{ 'classic-artwork': classicStory }"
           />
           <div v-else class="text-art" aria-hidden="true">
             <span class="sentence-number">{{ String(sentenceIndex + 1).padStart(2, '0') }}</span>

@@ -10,15 +10,21 @@ import {
   REVIEW_TABS,
 } from '../src/course/experience';
 
-test('六个示例按主题提供并且标识不重复', () => {
-  assert.equal(SAMPLE_CATALOG.length, 6);
+test('十本课程故事按主题提供且标识不重复', () => {
+  assert.equal(SAMPLE_CATALOG.length, 10);
   assert.deepEqual(
     SAMPLE_CATALOG.map((item) => item.id),
     [...SAMPLE_IDS],
   );
-  assert.equal(new Set(SAMPLE_CATALOG.map((item) => item.title)).size, 6);
+  assert.equal(new Set(SAMPLE_CATALOG.map((item) => item.title)).size, 10);
   const grouped = samplesByTheme().flatMap((group) => group.items);
-  assert.equal(grouped.length, 6);
+  assert.equal(grouped.length, 10);
+  assert.deepEqual(
+    samplesByTheme()
+      .find((group) => group.theme === '经典故事')
+      ?.items.map((item) => item.id),
+    ['hare-tortoise', 'lion-mouse', 'crow-pitcher', 'fox-grapes'],
+  );
 });
 
 test('未知路径回到首页', () => {
@@ -27,10 +33,14 @@ test('未知路径回到首页', () => {
   assert.equal(resolveAppPath('/missing'), '/');
 });
 
-test('首页入口识别示例和自编故事', () => {
+test('首页入口识别内置课程和自编故事', () => {
   assert.deepEqual(courseEntry({ sample: 'school-day' }), {
     chosen: 'sample',
     sampleId: 'school-day',
+  });
+  assert.deepEqual(courseEntry({ sample: 'hare-tortoise' }), {
+    chosen: 'sample',
+    sampleId: 'hare-tortoise',
   });
   assert.deepEqual(courseEntry({ mode: 'custom' }), { chosen: 'custom', sampleId: null });
   assert.deepEqual(courseEntry({ sample: 'missing' }), { chosen: 'custom', sampleId: null });

@@ -10,6 +10,7 @@ export * from './parameters.js';
 export * from './validation.js';
 export * from './story-input.js';
 export * from './review-validation.js';
+export * from './classic-stories.js';
 export { COURSE_MEDIA_PATH, TELLTALE_VERSION, wordResultLabels } from './course.js';
 export type {
   StoryLesson,

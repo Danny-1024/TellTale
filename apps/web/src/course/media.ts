@@ -1,5 +1,5 @@
 import type { StoryLesson, PracticeReport } from '@telltale/contracts';
-import { wordResultLabels } from '@telltale/contracts';
+import { AESOP_ART_CREDIT, wordResultLabels } from '@telltale/contracts';
 
 export function speechRate(difficulty: 'L' | 'M' | 'H'): number {
   if (difficulty === 'L') return 0.85;
@@ -144,7 +144,7 @@ export async function renderBook(
   context.fillStyle = '#fefbf4';
   context.fillRect(0, 0, 1080, canvas.height);
   context.textBaseline = 'top';
-  // 封面和正文使用同一审核版本的图片，并在封面标明生成来源。
+  // 封面保留审核版本的配图和来源。
   context.fillStyle = '#123d35';
   context.fillRect(0, 0, canvas.width, headerHeight - 26);
   context.fillStyle = '#f4f7d5';
@@ -167,7 +167,9 @@ export async function renderBook(
       ? images.some(Boolean)
         ? 'AI 生成文字和配图 · 成人已审核'
         : 'AI 生成文字 · 成人已审核'
-      : '英语故事课 · TellTale English',
+      : lesson.classicStoryId
+        ? `改编自《伊索寓言》 · 插图 ${AESOP_ART_CREDIT}`
+        : '英语故事课 · TellTale English',
     80,
     y + 12,
   );

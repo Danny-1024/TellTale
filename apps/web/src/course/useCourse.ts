@@ -1,7 +1,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import type { CourseSnapshot, CourseReview, CourseAttempt, StoryLesson } from '@telltale/contracts';
-import { COURSE_MEDIA_PATH, inspectStoryInput, reviewIssues } from '@telltale/contracts';
+import {
+  COURSE_MEDIA_PATH,
+  inspectStoryInput,
+  isClassicStoryId,
+  reviewIssues,
+} from '@telltale/contracts';
 import * as api from './api';
 import { appendStoryPrompt, courseEntry, STORY_PROMPTS } from './experience';
 import { LessonAudio, renderBook, renderPracticeReport, speechRate } from './media';
@@ -207,6 +212,16 @@ export function useCourse() {
   }
   async function create() {
     await act(async () => {
+      const book = courseEntry(route.query).sampleId;
+      if (isClassicStoryId(book)) {
+        // 首页已选择书目，保存本次显示设置后直接进入该书的成人审核。
+        const selectedSettings = { ...settings.value };
+        if (session.value?.phase !== 'prepare')
+          await apply(await api.createSession(selectedSettings));
+        await apply(await api.command('sample', { sampleId: book }));
+        settings.value = selectedSettings;
+        return;
+      }
       // 本课已经建立时复用当前课堂，显示设置随成人批准保存。
       if (session.value?.phase === 'prepare') {
         move(chosen.value === 'sample' ? 'choose' : 'input');

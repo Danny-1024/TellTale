@@ -1,6 +1,13 @@
 import { z } from 'zod';
 import type { ReviewContent, StoryLesson } from '@telltale/contracts';
-import { reviewIssues } from '@telltale/contracts';
+import {
+  classicArtwork,
+  CLASSIC_STORIES,
+  CLASSIC_STORY_IDS,
+  isClassicStoryId,
+  reviewIssues,
+} from '@telltale/contracts';
+import { CLASSIC_LESSONS } from './classic-stories';
 
 const text = z.string().trim().min(1).max(300);
 const index = z.number().int().min(0).max(4);
@@ -180,7 +187,7 @@ export function createContent(
   };
 }
 
-export const SAMPLE_IDS = [
+const EVERYDAY_STORY_IDS = [
   'park-morning',
   'family-dinner',
   'school-day',
@@ -189,10 +196,14 @@ export const SAMPLE_IDS = [
   'happy-weekend',
 ] as const;
 
+export const SAMPLE_IDS = [...EVERYDAY_STORY_IDS, ...CLASSIC_STORY_IDS] as const;
 export type SampleId = (typeof SAMPLE_IDS)[number];
 
-// 每个示例的选择、配对和填空共同覆盖 2–3 个词语。
-const SAMPLE_STORIES: Record<SampleId, { difficulty: 'L' | 'M' | 'H'; story: unknown }> = {
+// 每课的选择、配对和填空共同覆盖 2–3 个词语。
+const SAMPLE_STORIES: Record<
+  (typeof EVERYDAY_STORY_IDS)[number],
+  { difficulty: 'L' | 'M' | 'H'; story: unknown }
+> = {
   'park-morning': {
     difficulty: 'L',
     story: {
@@ -418,6 +429,14 @@ const SAMPLE_STORIES: Record<SampleId, { difficulty: 'L' | 'M' | 'H'; story: unk
 };
 
 export function sampleContent(sampleId: SampleId = 'park-morning'): ReviewContent {
+  if (isClassicStoryId(sampleId)) {
+    const { title, titleEn } = CLASSIC_STORIES[sampleId];
+    const content = createContent({ ...CLASSIC_LESSONS[sampleId], title, titleEn }, 'L', 'sample');
+    content.lesson.classicStoryId = sampleId;
+    content.lesson.sentences[0]!.imageUrl = classicArtwork(sampleId);
+    content.lesson.sentences[0]!.imageAlt = `${title}的原版插图`;
+    return content;
+  }
   const sample = SAMPLE_STORIES[sampleId]!;
   const content = createContent(sample.story, sample.difficulty, 'sample');
   const knownWords = new Set(['park', 'mom', 'dog', 'ball', 'tail']);

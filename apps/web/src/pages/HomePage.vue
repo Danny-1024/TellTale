@@ -1,4 +1,11 @@
 <script setup lang="ts">
+import {
+  AESOP_ART_CREDIT,
+  AESOP_EDITION_URL,
+  classicArtwork,
+  CLASSIC_STORIES,
+  CLASSIC_STORY_IDS,
+} from '@telltale/contracts';
 import StatusBanner from './StatusBanner.vue';
 </script>
 
@@ -24,7 +31,10 @@ import StatusBanner from './StatusBanner.vue';
           <p class="lead">
             成人准备和审核，孩子读故事、学词语、做练习。课后可以保存双语绘本和练习报告。
           </p>
-          <RouterLink class="button primary large" to="/course?mode=custom">创建课程</RouterLink>
+          <div class="landing-actions">
+            <RouterLink class="button primary large" to="/course?mode=custom">创建课程</RouterLink>
+            <a class="button outline" href="#classic-stories">浏览经典故事</a>
+          </div>
           <p class="soft small">为 7–12 岁儿童设计 · 无需注册</p>
         </div>
         <div class="landing-cover" aria-hidden="true">
@@ -35,10 +45,26 @@ import StatusBanner from './StatusBanner.vue';
         </div>
       </section>
       <ol class="landing-flow" aria-label="课堂流程">
-        <li><strong>准备故事</strong><span>选择难度，检查生成的文字和配图。</span></li>
+        <li><strong>准备故事</strong><span>从故事库选书，或创建自己的配图故事。</span></li>
         <li><strong>陪伴学习</strong><span>逐句听读，查看词卡，完成本课练习。</span></li>
         <li><strong>保存成果</strong><span>下载本课绘本与练习报告。</span></li>
       </ol>
+      <section id="classic-stories" class="classic-stories" aria-labelledby="classic-stories-title">
+        <h2 id="classic-stories-title">经典故事</h2>
+        <ul class="classic-story-grid">
+          <li v-for="id in CLASSIC_STORY_IDS" :key="id">
+            <RouterLink class="classic-story-card" :to="{ path: '/course', query: { sample: id } }">
+              <img :src="classicArtwork(id)" alt="" loading="lazy" />
+              <strong>{{ CLASSIC_STORIES[id].title }}</strong>
+              <span lang="en">{{ CLASSIC_STORIES[id].titleEn }}</span>
+            </RouterLink>
+          </li>
+        </ul>
+        <p class="soft small">
+          选自《伊索寓言》，课堂版为双语改编。插图 {{ AESOP_ART_CREDIT }}。
+          <a :href="AESOP_EDITION_URL">查看馆藏原版</a>
+        </p>
+      </section>
     </main>
   </div>
 </template>
