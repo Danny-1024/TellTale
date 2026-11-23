@@ -72,11 +72,19 @@ const loadImage = (url: string) =>
     image.src = url;
   });
 
-export async function renderBook(lesson: StoryLesson): Promise<Blob> {
+export async function renderBook(
+  lesson: StoryLesson,
+  source: (url: string) => string | undefined,
+): Promise<Blob> {
   await document.fonts.load('800 36px Nunito');
   if (!document.fonts.check('800 36px Nunito')) throw new Error('绘本字体加载失败。');
   const images = await Promise.all(
-    lesson.sentences.map((s) => (s.imageUrl ? loadImage(s.imageUrl) : null)),
+    lesson.sentences.map((s) => {
+      if (!s.imageUrl) return null;
+      const url = source(s.imageUrl);
+      if (!url) throw new Error('本课配图尚未加载，请重新尝试。');
+      return loadImage(url);
+    }),
   );
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
@@ -148,7 +156,11 @@ export async function renderBook(lesson: StoryLesson): Promise<Blob> {
   }
   context.font = zhFont;
   context.fillText(
-    lesson.source === 'custom' ? 'AI 生成文字 · 成人已审核' : '示例故事 · TellTale English',
+    lesson.source === 'custom'
+      ? images.some(Boolean)
+        ? 'AI 生成文字和配图 · 成人已审核'
+        : 'AI 生成文字 · 成人已审核'
+      : '示例故事 · TellTale English',
     80,
     y + 12,
   );

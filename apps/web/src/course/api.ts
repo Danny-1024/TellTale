@@ -1,11 +1,11 @@
 import type {
   CourseSnapshot,
-  ReviewContent,
-  StoryDraft,
+  CourseReview,
   CourseAttempt,
   PracticeReport,
   MistakeReview,
 } from '@telltale/contracts';
+import { COURSE_MEDIA_PATH } from '@telltale/contracts';
 
 export class ApiError extends Error {
   constructor(
@@ -53,7 +53,20 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 export const loadSession = () => request<CourseResult>('session');
 export const createSession = (settings: CourseSnapshot['settings']) =>
   request<CourseResult>('session', { kind: 'class', settings });
-export const getReview = () => request<ReviewContent & { raw: StoryDraft | null }>('course/review');
+export const getReview = () => request<CourseReview>('course/review');
+export async function getCourseImage(path: string) {
+  if (!path.startsWith(COURSE_MEDIA_PATH)) throw new Error('课程图片地址无效。');
+  const response = await fetch(path, {
+    credentials: 'same-origin',
+    cache: 'no-store',
+    redirect: 'error',
+    headers: { 'X-Runtime-Token': runtime },
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok || response.headers.get('content-type') !== 'image/png')
+    throw new ApiError(response.status, 'MEDIA_LOAD_FAILED', '本课图片加载失败，请重试。');
+  return response.blob();
+}
 export const getReport = () => request<PracticeReport>('course/report');
 export const heartbeat = () => request<{ expiresAt: number }>('course/heartbeat', {});
 export async function unlock(): Promise<CourseResult> {

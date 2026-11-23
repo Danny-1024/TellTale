@@ -1,10 +1,12 @@
 import { DurableObject } from 'cloudflare:workers';
 import { z } from 'zod';
-import { inspectStoryInput } from '@telltale/contracts';
+import { hasContactInformation, inspectStoryInput } from '@telltale/contracts';
 import type {
   CourseSnapshot,
   CourseAttempt,
   CourseSummary,
+  CourseReview,
+  IllustrationStatus,
   MistakeReview,
   ReviewContent,
 } from '@telltale/contracts';
@@ -16,6 +18,18 @@ import {
   type GeneratedStory,
 } from './content';
 import { generateStory, ProviderError } from './provider';
+import {
+  CourseImages,
+  makeCourseImage,
+  pictureTargets,
+  type CourseImage,
+} from './course-illustrations';
+import {
+  IMAGE_DEADLINE,
+  IMAGE_REQUEST_LIMIT,
+  moderate,
+  type IllustrationEnvironment,
+} from './openai-images';
 import { focusExercises } from './focus';
 import { wordPracticeResults } from './report';
 import {
@@ -39,7 +53,15 @@ interface RoomState {
   raw: GeneratedStory | null;
   source: string;
   job:
-    (NonNullable<CourseSnapshot['job']> & { deadline: number; difficulty: 'L' | 'M' | 'H' }) | null;
+    | (NonNullable<CourseSnapshot['job']> & {
+        deadline: number;
+        difficulty: 'L' | 'M' | 'H';
+        revision?: number;
+      })
+    | null;
+  illustrationsRequired?: boolean;
+  illustrationCount?: number;
+  illustrationReview?: { revision: number; safetyModel: string; safetyId: string } | null;
   runtime: string;
   createdAt: number;
   expiresAt: number;
@@ -91,12 +113,16 @@ function mistakeReviews(state: RoomState): MistakeReview[] {
   return [...mistakes.values()];
 }
 
-export class CourseRoom extends DurableObject<Env> {
-  constructor(ctx: DurableObjectState, env: Env) {
+export class CourseRoom extends DurableObject<IllustrationEnvironment> {
+  private readonly images: CourseImages;
+  private imageRequest: { id: string; controller: AbortController } | null = null;
+
+  constructor(ctx: DurableObjectState, env: IllustrationEnvironment) {
     super(ctx, env);
     ctx.storage.sql.exec(
       'CREATE TABLE IF NOT EXISTS room (id INTEGER PRIMARY KEY CHECK(id=1), value TEXT NOT NULL)',
     );
+    this.images = new CourseImages(ctx.storage.sql);
   }
   private read(): RoomState | null {
     const row = this.ctx.storage.sql
@@ -109,6 +135,39 @@ export class CourseRoom extends DurableObject<Env> {
       'INSERT INTO room(id,value) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET value=excluded.value',
       JSON.stringify(state),
     );
+  }
+  private illustrationStatus(state: RoomState): IllustrationStatus {
+    if (!state.illustrationsRequired) return 'disabled';
+    const lesson = state.content?.lesson;
+    if (
+      lesson &&
+      state.illustrationReview?.revision === lesson.revision &&
+      this.images.count(lesson) === lesson.sentences.length + lesson.words.length
+    )
+      return 'ready';
+    return this.env.OPENAI_API_KEY ? 'required' : 'unavailable';
+  }
+
+  private discardIllustrations(state: RoomState, keepCancelledJob: boolean) {
+    // 编辑或换课使旧修订版及正在处理的配图失效，后续返回的图片不能写回。
+    this.imageRequest?.controller.abort();
+    state.illustrationReview = null;
+    if (state.job?.kind === 'images' && !keepCancelledJob) state.job = null;
+    if (state.content?.lesson.source === 'custom') {
+      for (const sentence of state.content.lesson.sentences) {
+        sentence.imageUrl = null;
+        sentence.imageAlt = null;
+      }
+      for (const word of state.content.lesson.words) word.imageUrl = null;
+    }
+  }
+
+  private deleteCourse() {
+    this.imageRequest?.controller.abort();
+    this.ctx.storage.transactionSync(() => {
+      this.images.clear();
+      this.ctx.storage.sql.exec('DELETE FROM room');
+    });
   }
   private snapshot(state: RoomState, runtime: string): CourseSnapshot {
     const canRead =
@@ -129,6 +188,7 @@ export class CourseRoom extends DurableObject<Env> {
       job: state.job
         ? {
             id: state.job.id,
+            ...(state.job.kind === 'images' ? { kind: 'images' as const } : {}),
             status: state.job.status,
             stage: state.job.stage,
             error: state.job.error,
@@ -222,7 +282,10 @@ export class CourseRoom extends DurableObject<Env> {
     identity: Identity,
     requestHash: string,
   ): Promise<Response> {
-    let state = this.authorize(identity, !['session', 'review', 'report'].includes(action));
+    let state = this.authorize(
+      identity,
+      !['session', 'review', 'report', 'media'].includes(action),
+    );
     const adult = () =>
       requireCondition(state.mode === 'adult', 403, 'ADULT_REQUIRED', '请先进入课程设置。');
     const child = () =>
@@ -242,7 +305,29 @@ export class CourseRoom extends DurableObject<Env> {
         'INVALID_TRANSITION',
         '当前没有待审核的课程。',
       );
-      return Response.json({ ...state.content, raw: state.raw });
+      const result: CourseReview = {
+        ...state.content,
+        raw: state.raw,
+        illustrations: this.illustrationStatus(state),
+      };
+      return Response.json(result);
+    }
+    if (action === 'media') {
+      if (state.mode === 'child') child();
+      const lesson = state.content?.lesson;
+      requireCondition(
+        lesson &&
+          state.illustrationReview?.revision === lesson.revision &&
+          (state.phase === 'review' || state.phase === 'learning' || state.phase === 'finished'),
+        404,
+        'MEDIA_NOT_FOUND',
+        '找不到当前课程图片。',
+      );
+      const image = this.images.read(lesson, uuid.parse(input));
+      requireCondition(image, 404, 'MEDIA_NOT_FOUND', '找不到当前课程图片。');
+      return new Response(image.bytes, {
+        headers: { 'Content-Type': image.mime, 'Cross-Origin-Resource-Policy': 'same-origin' },
+      });
     }
     if (action === 'report') {
       // 本课报告仅包含已审核内容和本课结果，儿童运行令牌可以读取。
@@ -278,7 +363,7 @@ export class CourseRoom extends DurableObject<Env> {
     }
     if (action === 'close') {
       if (state.mode === 'child') child();
-      this.ctx.storage.sql.exec('DELETE FROM room');
+      this.deleteCourse();
       await this.ctx.storage.deleteAlarm();
       return Response.json({ closed: true });
     }
@@ -292,7 +377,7 @@ export class CourseRoom extends DurableObject<Env> {
         '同一次操作的内容发生变化。',
       );
       // 重复提交仍执行当前权限检查。
-      if (['sample', 'generate', 'cancel', 'edit', 'focus'].includes(action)) adult();
+      if (['sample', 'generate', 'cancel', 'edit', 'focus', 'illustrate'].includes(action)) adult();
       else if (action === 'approve') {
         // 批准响应丢失时可重取当前运行令牌；成人重新进入后旧回执失效。
         const receipt = existing.value as { runtime: string };
@@ -312,6 +397,7 @@ export class CourseRoom extends DurableObject<Env> {
       '本课操作次数已达到上限，请成人结束课程。',
     );
     let value: unknown;
+    let discardImages = false;
     if (action === 'sample') {
       adult();
       // 缺省仍打开原来的公园示例，已有调用不需要额外字段。
@@ -336,6 +422,8 @@ export class CourseRoom extends DurableObject<Env> {
       state.attempts = [];
       state.events = [];
       state.summary = null;
+      state.illustrationsRequired = false;
+      discardImages = true;
       value = { session: this.snapshot(state, '') };
     } else if (action === 'generate') {
       adult();
@@ -411,6 +499,8 @@ export class CourseRoom extends DurableObject<Env> {
       state.attempts = [];
       state.events = [];
       state.summary = null;
+      state.illustrationsRequired = Boolean(this.env.OPENAI_API_KEY);
+      discardImages = true;
       state.job = {
         id: crypto.randomUUID(),
         status: 'queued',
@@ -432,8 +522,110 @@ export class CourseRoom extends DurableObject<Env> {
       );
       state.job.status = 'cancelled';
       state.job.stage = '已取消';
-      state.content = null;
-      state.raw = null;
+      if (state.job.kind === 'images') discardImages = true;
+      else {
+        state.content = null;
+        state.raw = null;
+      }
+      value = { session: this.snapshot(state, '') };
+    } else if (action === 'illustrate') {
+      adult();
+      const data = z
+        .strictObject({ operationId: uuid, revision: z.number().int(), confirmed: z.literal(true) })
+        .parse(input);
+      const lesson = state.content?.lesson;
+      requireCondition(
+        lesson?.source === 'custom' &&
+          state.raw &&
+          state.phase === 'review' &&
+          state.illustrationsRequired,
+        409,
+        'INVALID_TRANSITION',
+        '请先准备待审核的自编故事。',
+      );
+      requireCondition(
+        lesson.revision === data.revision,
+        409,
+        'REVISION_CONFLICT',
+        '内容已更新，请重新打开审核。',
+      );
+      requireCondition(
+        this.env.OPENAI_API_KEY,
+        503,
+        'IMAGE_PROVIDER_NOT_CONFIGURED',
+        '本课配图服务尚未配置。',
+      );
+      requireCondition(
+        this.illustrationStatus(state) === 'required' &&
+          !['queued', 'running'].includes(state.job?.status ?? ''),
+        409,
+        'IMAGE_JOB_EXISTS',
+        '本课配图已完成或正在处理。',
+      );
+      requireCondition(
+        !hasContactInformation(JSON.stringify(state.raw)),
+        400,
+        'PERSONAL_INFORMATION',
+        '请先删除教学内容中的联系方式。',
+      );
+      requireCondition(
+        (state.illustrationCount ?? 0) < 10,
+        429,
+        'IMAGE_LIMIT',
+        '本课已达到10次配图上限。',
+      );
+      const reserved = await this.env.QUOTAS.getByName('generation-budget').reserve(
+        'illustration',
+        30,
+        24 * 60 * 60_000,
+        `illustration:${state.id}:${operationId}`,
+      );
+      requireCondition(reserved, 429, 'IMAGE_LIMIT', '今天的课堂配图额度已用完，请稍后再来。');
+      state = this.authorize(identity, true);
+      adult();
+      const repeated = state.seen[operationId];
+      if (repeated) {
+        requireCondition(
+          repeated.hash === requestHash,
+          409,
+          'IDEMPOTENCY_CONFLICT',
+          '同一次操作的内容发生变化。',
+        );
+        return Response.json(repeated.value);
+      }
+      requireCondition(
+        state.content?.lesson.id === lesson.id &&
+          state.content.lesson.revision === data.revision &&
+          state.phase === 'review',
+        409,
+        'REVISION_CONFLICT',
+        '内容已更新，请重新打开审核。',
+      );
+      requireCondition(
+        this.illustrationStatus(state) === 'required' &&
+          !['queued', 'running'].includes(state.job?.status ?? ''),
+        409,
+        'IMAGE_JOB_EXISTS',
+        '本课配图已完成或正在处理。',
+      );
+      requireCondition(
+        (state.illustrationCount ?? 0) < 10,
+        429,
+        'IMAGE_LIMIT',
+        '本课已达到10次配图上限。',
+      );
+      state.illustrationCount = (state.illustrationCount ?? 0) + 1;
+      state.job = {
+        id: crypto.randomUUID(),
+        kind: 'images',
+        revision: data.revision,
+        status: 'queued',
+        stage: '等待生成配图',
+        error: null,
+        attempts: 0,
+        deadline: Date.now() + IMAGE_DEADLINE,
+        difficulty: lesson.difficulty,
+      };
       value = { session: this.snapshot(state, '') };
     } else if (action === 'focus') {
       adult();
@@ -465,6 +657,7 @@ export class CourseRoom extends DurableObject<Env> {
       const result = focusExercises(state.content, state.raw, data.wordIds);
       state.content = result.content;
       state.raw = result.raw;
+      discardImages = true;
       value = { session: this.snapshot(state, '') };
     } else if (action === 'edit') {
       adult();
@@ -499,6 +692,7 @@ export class CourseRoom extends DurableObject<Env> {
       edited.lesson.revision = state.content.lesson.revision + 1;
       state.content = edited;
       state.raw = data.raw;
+      discardImages = true;
       value = { session: this.snapshot(state, '') };
     } else if (action === 'approve') {
       adult();
@@ -521,6 +715,12 @@ export class CourseRoom extends DurableObject<Env> {
         409,
         'REVISION_CONFLICT',
         '内容已更新，请重新检查。',
+      );
+      requireCondition(
+        !state.illustrationsRequired || this.illustrationStatus(state) === 'ready',
+        409,
+        'ILLUSTRATIONS_NOT_READY',
+        '请先生成本课配图并通过文字和图片安全检查。',
       );
       state.phase = 'learning';
       state.mode = 'child';
@@ -666,8 +866,15 @@ export class CourseRoom extends DurableObject<Env> {
       state.summary = this.summarize(state, data.reason);
       value = { session: this.snapshot(state, identity.runtime) };
     } else throw new HttpError(404, 'NOT_FOUND', '找不到该操作。');
+    if (discardImages) {
+      this.discardIllustrations(state, action === 'cancel');
+      if (action === 'edit' || action === 'focus') value = { session: this.snapshot(state, '') };
+    }
     state.seen[operationId] = { hash: requestHash, value };
-    this.save(state);
+    this.ctx.storage.transactionSync(() => {
+      if (discardImages) this.images.clear();
+      this.save(state);
+    });
     await this.ctx.storage.setAlarm(
       state.job?.status === 'queued' ? Date.now() + 1 : Math.min(state.leaseUntil, state.expiresAt),
     );
@@ -695,20 +902,136 @@ export class CourseRoom extends DurableObject<Env> {
           : '下次开始前，请孩子自己选择想讲的故事，并留出慢慢回答的时间。',
     };
   }
+
+  private async withImageSlot<T>(deadline: number, signal: AbortSignal, run: () => Promise<T>) {
+    const quota = this.env.QUOTAS.getByName('image-concurrency');
+    const ticket = crypto.randomUUID();
+    while (Date.now() < deadline) {
+      if (signal.aborted) throw new ProviderError('IMAGE_CANCELLED', false);
+      // 租约同时涵盖生成和独立审核。进程中断后也会自动释放全站并发额度。
+      if (
+        await quota.acquireImageSlot(
+          ticket,
+          Math.min(deadline, Date.now() + IMAGE_REQUEST_LIMIT * 2 + 5_000),
+        )
+      ) {
+        try {
+          if (signal.aborted) throw new ProviderError('IMAGE_CANCELLED', false);
+          return await run();
+        } finally {
+          await quota.releaseImageSlot(ticket);
+        }
+      }
+      await new Promise<void>((resolve) => setTimeout(resolve, 250));
+    }
+    throw new ProviderError('IMAGE_DEADLINE', false);
+  }
+
+  private async runIllustrations(state: RoomState) {
+    const job = state.job!;
+    const current = () => {
+      const room = this.read();
+      return room?.phase === 'review' &&
+        room.job?.id === job.id &&
+        room.job.status === 'running' &&
+        room.content?.lesson.revision === job.revision
+        ? room
+        : null;
+    };
+    if (job.status === 'running') {
+      // 告警被重放时，供应商可能已完成计费。由成人决定是否启动下一组。
+      job.status = 'failed';
+      job.error = 'IMAGE_RESULT_UNKNOWN';
+      job.stage = '配图中断，请重试';
+      this.save(state);
+      return;
+    }
+    const lesson = state.content!.lesson;
+    const apiKey = this.env.OPENAI_API_KEY;
+    job.status = 'running';
+    job.attempts = 1;
+    job.stage = '正在检查故事、词卡和练习文字';
+    this.save(state);
+    const controller = new AbortController();
+    this.imageRequest = { id: job.id, controller };
+    const { signal } = controller;
+    try {
+      if (!apiKey) throw new ProviderError('IMAGE_PROVIDER_NOT_CONFIGURED', false);
+      // 成人确认后审核当前教学文字，保留独立的文本安全结果。原始经历不进入 OpenAI 请求。
+      const textSafety = await moderate(apiKey, JSON.stringify(state.raw), job.deadline, signal);
+      if (textSafety.flagged) throw new ProviderError('ILLUSTRATION_TEXT_FLAGGED', false);
+      const status = current();
+      if (!status) return;
+      status.job!.stage = '正在生成并检查本课配图';
+      this.save(status);
+
+      const targets = pictureTargets(lesson);
+      const images: CourseImage[] = [];
+      const worker = async () => {
+        try {
+          for (let target = targets.shift(); target && !signal.aborted; target = targets.shift())
+            images.push(
+              await makeCourseImage(apiKey, target, job.deadline, signal, (run) =>
+                this.withImageSlot(job.deadline, signal, run),
+              ),
+            );
+        } catch (error) {
+          controller.abort(error);
+          throw error;
+        }
+      };
+      await Promise.allSettled([worker(), worker()]);
+      if (signal.aborted) throw signal.reason;
+      const latest = current();
+      if (!latest) return;
+      if (Date.now() >= Math.min(latest.leaseUntil, latest.expiresAt)) {
+        this.deleteCourse();
+        return;
+      }
+      if (Date.now() >= job.deadline) throw new ProviderError('IMAGE_DEADLINE', false);
+      if (images.length !== lesson.sentences.length + lesson.words.length)
+        throw new Error('Illustration targets were incomplete.');
+      latest.illustrationReview = {
+        revision: lesson.revision,
+        safetyModel: textSafety.model,
+        safetyId: textSafety.id,
+      };
+      latest.job!.status = 'ready';
+      latest.job!.stage = '配图已通过检查，请成人审核';
+      this.ctx.storage.transactionSync(() => {
+        this.images.store(latest.content!.lesson, job.id, images);
+        this.save(latest);
+      });
+    } catch (error) {
+      const latest = current();
+      if (!latest) return;
+      if (!(error instanceof ProviderError)) throw error;
+      latest.job!.status = 'failed';
+      latest.job!.error = error.code;
+      latest.job!.stage = '配图未完成';
+      console.error(JSON.stringify({ stage: 'illustration', errorCode: error.code }));
+      this.save(latest);
+    } finally {
+      if (this.imageRequest?.id === job.id) this.imageRequest = null;
+    }
+  }
+
   async alarm(): Promise<void> {
     let state = this.read();
     if (!state) return;
     if (Date.now() >= Math.min(state.leaseUntil, state.expiresAt)) {
-      this.ctx.storage.sql.exec('DELETE FROM room');
+      this.deleteCourse();
       return;
     }
-    if (state.job?.status === 'running') {
+    if (state.job?.kind === 'images' && ['queued', 'running'].includes(state.job.status)) {
+      await this.runIllustrations(state);
+    } else if (state.job?.status === 'running') {
       state.job.status = 'failed';
       state.job.error = 'PROVIDER_RESULT_UNKNOWN';
       state.job.stage = '生成中断，请重新发起';
       this.save(state);
     }
-    if (state.job?.status === 'queued') {
+    if (state.job?.status === 'queued' && state.job.kind !== 'images') {
       const id = state.job.id;
       state.job.status = 'running';
       state.job.stage = '正在生成英语故事与练习';
@@ -730,7 +1053,7 @@ export class CourseRoom extends DurableObject<Env> {
           const latest = this.read();
           if (!latest || latest.job?.id !== id || latest.job.status !== 'running') break;
           if (Date.now() >= Math.min(latest.leaseUntil, latest.expiresAt)) {
-            this.ctx.storage.sql.exec('DELETE FROM room');
+            this.deleteCourse();
             return;
           }
           // 网络完成与解析结束都必须处于原任务期限内，迟到内容不能进入审核。
@@ -800,6 +1123,24 @@ export class TrafficQuota extends DurableObject<Env> {
     ctx.storage.sql.exec(
       'CREATE TABLE IF NOT EXISTS quota (key TEXT PRIMARY KEY, used INTEGER NOT NULL, expires INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS reservations (id TEXT PRIMARY KEY, expires INTEGER NOT NULL)',
     );
+  }
+  acquireImageSlot(id: string, expires: number): boolean {
+    const now = Date.now();
+    if (expires <= now) return false;
+    const sql = this.ctx.storage.sql;
+    return this.ctx.storage.transactionSync(() => {
+      sql.exec(
+        'CREATE TABLE IF NOT EXISTS image_slots (id TEXT PRIMARY KEY, expires INTEGER NOT NULL)',
+      );
+      sql.exec('DELETE FROM image_slots WHERE expires<=?', now);
+      if (sql.exec<{ total: number }>('SELECT COUNT(*) AS total FROM image_slots').one().total >= 2)
+        return false;
+      sql.exec('INSERT INTO image_slots VALUES (?,?)', id, expires);
+      return true;
+    });
+  }
+  releaseImageSlot(id: string): void {
+    this.ctx.storage.sql.exec('DELETE FROM image_slots WHERE id=?', id);
   }
   async reserve(key: string, limit: number, period: number, operationId: string): Promise<boolean> {
     const now = Date.now();

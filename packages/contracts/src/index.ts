@@ -10,7 +10,7 @@ export * from './parameters.js';
 export * from './validation.js';
 export * from './story-input.js';
 export * from './review-validation.js';
-export { wordResultLabels } from './course.js';
+export { COURSE_MEDIA_PATH, wordResultLabels } from './course.js';
 export type {
   StoryLesson,
   StorySentence,
@@ -20,6 +20,8 @@ export type {
   CourseAttempt,
   CourseSummary,
   CourseJob,
+  CourseReview,
+  IllustrationStatus,
   CourseSnapshot,
   MistakeReview,
   ReviewContent,

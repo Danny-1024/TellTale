@@ -1,7 +1,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import type { CourseSnapshot, ReviewContent, StoryDraft, CourseAttempt } from '@telltale/contracts';
-import { inspectStoryInput, reviewIssues } from '@telltale/contracts';
+import type { CourseSnapshot, CourseReview, CourseAttempt, StoryLesson } from '@telltale/contracts';
+import { COURSE_MEDIA_PATH, inspectStoryInput, reviewIssues } from '@telltale/contracts';
 import * as api from './api';
 import { appendStoryPrompt, courseEntry, STORY_PROMPTS } from './experience';
 import { LessonAudio, renderBook, renderPracticeReport, speechRate } from './media';
@@ -10,7 +10,38 @@ import { type SampleId } from './sampleCatalog';
 export function useCourse() {
   const stage = ref('home');
   const session = ref<CourseSnapshot | null>(null);
-  const review = ref<(ReviewContent & { raw: StoryDraft | null }) | null>(null);
+  const review = ref<CourseReview | null>(null);
+  const consentToIllustrate = ref(false);
+  const pictureUrls = ref<Record<string, string>>({});
+  let pictureSequence = 0;
+  function clearPictures() {
+    pictureSequence++;
+    Object.values(pictureUrls.value).forEach((url) => URL.revokeObjectURL(url));
+    pictureUrls.value = {};
+  }
+  function imageSource(url: string | null | undefined) {
+    if (!url) return undefined;
+    return url.startsWith(COURSE_MEDIA_PATH) ? pictureUrls.value[url] : url;
+  }
+  const privateImagePaths = (item: StoryLesson) =>
+    [...item.sentences, ...item.words].flatMap(({ imageUrl }) =>
+      imageUrl?.startsWith(COURSE_MEDIA_PATH) ? [imageUrl] : [],
+    );
+  const illustrationsVisible = computed(
+    () =>
+      review.value?.illustrations !== 'ready' ||
+      privateImagePaths(review.value.lesson).every((url) => pictureUrls.value[url]),
+  );
+  async function loadPictures(item: StoryLesson) {
+    clearPictures();
+    const sequence = pictureSequence;
+    const paths = privateImagePaths(item);
+    const blobs = await Promise.all(paths.map(api.getCourseImage));
+    if (sequence === pictureSequence)
+      pictureUrls.value = Object.fromEntries(
+        paths.map((path, index) => [path, URL.createObjectURL(blobs[index]!)]),
+      );
+  }
   const busy = ref(false),
     error = ref(''),
     loading = ref(true),
@@ -121,6 +152,7 @@ export function useCourse() {
       if (!(cause instanceof api.ApiError)) console.error(cause);
       if (cause instanceof api.ApiError && cause.status === 401) {
         clearExports();
+        clearPictures();
         audio.stop();
         session.value = null;
         stage.value = 'expired';
@@ -135,10 +167,12 @@ export function useCourse() {
   }
   async function openReview() {
     review.value = await api.getReview();
+    consentToIllustrate.value = false;
     focusWordIds.value = [...savedFocus.value];
     checks.value = [false, false, false, false, false];
     reviewTab.value = 'story';
     move('review');
+    await loadPictures(review.value.lesson);
   }
   function applyEntryQuery() {
     const entry = courseEntry(route.query);
@@ -162,11 +196,14 @@ export function useCourse() {
       move('recover');
       return;
     }
-    if (result.session.phase === 'review') await openReview();
-    else if (result.session.job && ['running', 'queued'].includes(result.session.job.status))
+    if (result.session.job && ['running', 'queued'].includes(result.session.job.status)) {
+      clearPictures();
       move('waiting');
-    else if (result.session.phase === 'finished') move('summary');
-    else move('choose');
+    } else if (result.session.phase === 'review') await openReview();
+    else if (result.session.phase === 'finished') {
+      move('summary');
+      if (result.session.lesson) await loadPictures(result.session.lesson);
+    } else move('choose');
   }
   async function create() {
     await act(async () => {
@@ -200,8 +237,22 @@ export function useCourse() {
   }
   async function cancelGeneration() {
     await act(async () => {
-      session.value = (await api.command('cancel', { jobId: session.value?.job?.id })).session;
-      move('input');
+      const result = await api.command('cancel', { jobId: session.value?.job?.id });
+      if (result.session.job?.kind === 'images') await apply(result);
+      else {
+        session.value = result.session;
+        move('input');
+      }
+    });
+  }
+  async function illustrate() {
+    await act(async () => {
+      await apply(
+        await api.command('illustrate', {
+          revision: review.value!.lesson.revision,
+          confirmed: consentToIllustrate.value,
+        }),
+      );
     });
   }
   async function saveEdits() {
@@ -392,7 +443,7 @@ export function useCourse() {
   async function makeBook() {
     await act(async () => {
       if (bookUrl.value) URL.revokeObjectURL(bookUrl.value);
-      const blob = await renderBook(lesson.value!);
+      const blob = await renderBook(lesson.value!, imageSource);
       bookUrl.value = URL.createObjectURL(blob);
       move('book');
     });
@@ -416,6 +467,7 @@ export function useCourse() {
       story.value = '';
       dialog.value = null;
       clearExports();
+      clearPictures();
       move('home');
     });
   }
@@ -428,6 +480,7 @@ export function useCourse() {
         error.value = cause instanceof Error ? cause.message : '连接失败，请重试。';
         if (cause instanceof api.ApiError && cause.status === 401) {
           clearExports();
+          clearPictures();
           session.value = null;
           move('expired');
         }
@@ -456,7 +509,11 @@ export function useCourse() {
         if (stage.value === 'waiting') {
           const result = await api.loadSession();
           session.value = result.session;
-          if (result.session.phase === 'review') await openReview();
+          if (
+            result.session.phase === 'review' &&
+            !['running', 'queued'].includes(result.session.job?.status ?? '')
+          )
+            await openReview();
           else if (
             result.session.job?.status === 'failed' ||
             result.session.job?.status === 'cancelled'
@@ -477,6 +534,7 @@ export function useCourse() {
     window.removeEventListener('pagehide', stopAudio);
     audio.stop();
     clearExports();
+    clearPictures();
   });
   watch(
     [story, difficulty],
@@ -540,6 +598,11 @@ export function useCourse() {
     create,
     chooseStory,
     generate,
+    illustrate,
+    consentToIllustrate,
+    illustrationsVisible,
+    imageSource,
+    reloadPictures: () => act(() => loadPictures(review.value!.lesson)),
     cancelGeneration,
     saveEdits,
     discardEdits: () => act(openReview),

@@ -99,11 +99,15 @@ export interface PracticeReport {
 
 export interface CourseJob {
   id: string;
+  kind?: 'images';
   status: 'queued' | 'running' | 'ready' | 'failed' | 'cancelled';
   stage: string;
   error: string | null;
   attempts: number;
 }
+
+export const COURSE_MEDIA_PATH = '/api/v1/course/media/';
+export type IllustrationStatus = 'disabled' | 'required' | 'ready' | 'unavailable';
 
 export interface CourseSnapshot {
   id: string;
@@ -130,6 +134,11 @@ export interface ReviewContent {
   lesson: StoryLesson;
   answers: Record<string, string | Record<string, string>>;
   hints: Record<string, string>;
+}
+
+export interface CourseReview extends ReviewContent {
+  raw: StoryDraft | null;
+  illustrations: IllustrationStatus;
 }
 
 export interface StoryDraft {

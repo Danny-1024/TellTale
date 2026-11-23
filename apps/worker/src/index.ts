@@ -1,4 +1,5 @@
 import type { LiveResponse } from '@telltale/contracts';
+import { COURSE_MEDIA_PATH } from '@telltale/contracts';
 import { parseCookie, stringifySetCookie } from 'cookie';
 import { z } from 'zod';
 import {
@@ -8,11 +9,13 @@ import {
   randomToken,
   readJson,
   requireCondition,
+  uuid,
 } from './security';
+import type { IllustrationEnvironment } from './openai-images';
 export { CourseRoom, TrafficQuota } from './room';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: IllustrationEnvironment): Promise<Response> {
     const pathname = new URL(request.url).pathname;
     const headers = {
       'Cache-Control': 'no-store',
@@ -43,10 +46,18 @@ export default {
     try {
       if (pathname === '/api/v1/capabilities' && request.method === 'GET')
         return Response.json(
-          { generation: Boolean(env.DEEPSEEK_API_KEY), model: 'deepseek-flash', version: '1.2.0' },
+          {
+            generation: Boolean(env.DEEPSEEK_API_KEY),
+            illustrations: Boolean(env.OPENAI_API_KEY),
+            model: 'deepseek-flash',
+            version: '1.2.0',
+          },
           { headers },
         );
       const url = new URL(request.url);
+      const assetId = pathname.startsWith(COURSE_MEDIA_PATH)
+        ? uuid.safeParse(pathname.slice(COURSE_MEDIA_PATH.length)).data
+        : undefined;
       const routes = [
         'session',
         'capabilities',
@@ -58,6 +69,7 @@ export default {
           'cancel',
           'edit',
           'focus',
+          'illustrate',
           'approve',
           'event',
           'answer',
@@ -68,7 +80,7 @@ export default {
         ].map((name) => `course/${name}`),
       ];
       requireCondition(
-        routes.includes(pathname.slice('/api/v1/'.length)),
+        assetId || routes.includes(pathname.slice('/api/v1/'.length)),
         404,
         'NOT_FOUND',
         '找不到该操作。',
@@ -132,22 +144,25 @@ export default {
         '请成人准备一节新课。',
       );
       const [id, secret] = cookie.split('.');
-      const action =
-        pathname === '/api/v1/session'
+      const action = assetId
+        ? 'media'
+        : pathname === '/api/v1/session'
           ? 'session'
           : pathname.startsWith('/api/v1/course/')
             ? pathname.slice('/api/v1/course/'.length)
             : '';
       requireCondition(
         action &&
-          (['session', 'review', 'report'].includes(action) ? request.method === 'GET' : write),
+          (['session', 'review', 'report', 'media'].includes(action)
+            ? request.method === 'GET'
+            : write),
         404,
         'NOT_FOUND',
         '找不到该操作。',
       );
       const response = await env.COURSES.getByName(id!).handle(
         action,
-        input,
+        assetId ?? input,
         {
           cookieHash: await digest(secret!),
           csrf: request.headers.get('x-csrf-token') ?? '',
@@ -185,4 +200,4 @@ export default {
       throw error;
     }
   },
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<IllustrationEnvironment>;

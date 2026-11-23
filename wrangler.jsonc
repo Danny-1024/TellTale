@@ -5,7 +5,7 @@
   "compatibility_date": "2026-10-22",
   "workers_dev": true,
   "preview_urls": false,
-  "secrets": { "required": ["DEEPSEEK_API_KEY"] },
+  "secrets": { "required": ["DEEPSEEK_API_KEY", "OPENAI_API_KEY"] },
   "durable_objects": {
     "bindings": [
       { "name": "COURSES", "class_name": "CourseRoom" },

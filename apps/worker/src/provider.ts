@@ -5,8 +5,9 @@ export class ProviderError extends Error {
   constructor(
     public code: string,
     public retryable: boolean,
+    options?: ErrorOptions,
   ) {
-    super(code);
+    super(code, options);
   }
 }
 
